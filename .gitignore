@@ -39,5 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-data/
+# Runtime data stores (real client data) — root folder only, NOT src/lib/data source.
+/data/
 .env.local
