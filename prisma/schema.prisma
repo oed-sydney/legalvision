@@ -1,0 +1,575 @@
+// LegalVision Paid Media Reporting — data model (Framework §17).
+// Money: numeric(14,4) native currency; facts never store converted values.
+// Every fact carries `source` ('mock'|'windsor'|'direct'); prod-path views exclude 'mock'.
+// RLS (deny-by-default) is applied via SQL migration on every data table, joining
+// through user_scopes. Retention: dims+facts indefinite, staging 90d, sync logs 12mo,
+// audit 24mo.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection URL is supplied via prisma.config.ts (Prisma 7) — DATABASE_URL env.
+}
+
+// ---- Identity & access ------------------------------------------------------
+enum UserRole {
+  admin
+  internal
+  client
+  viewer
+}
+
+enum UserStatus {
+  invited
+  active
+  deactivated
+}
+
+model UserProfile {
+  id          String      @id @db.Uuid // = Supabase auth uid
+  email       String      @unique
+  name        String
+  role        UserRole
+  status      UserStatus  @default(invited)
+  invitedBy   String?     @db.Uuid
+  lastLoginAt DateTime?
+  leadRecordAccess Boolean @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  scopes      UserScope[]
+  auditLogs   AuditLog[]
+}
+
+enum ScopeType {
+  market
+  account
+  channel
+}
+
+// Semantics: no rows = all-access for the role; any rows = allow-list.
+model UserScope {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @db.Uuid
+  scopeType  ScopeType
+  scopeValue String
+  user       UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scopeType, scopeValue])
+}
+
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  actorId    String?     @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  at         DateTime    @default(now())
+  actor      UserProfile? @relation(fields: [actorId], references: [id])
+
+  @@index([actorId, at])
+  @@index([entityType, entityId])
+}
+
+// ---- Reference dims ---------------------------------------------------------
+enum ChannelCode {
+  google_ads
+  meta_ads
+}
+
+enum ConnectedSource {
+  windsor
+  direct
+  mock
+}
+
+model Market {
+  code             String      @id // AU|UK|NZ
+  name             String
+  currencyCode     String
+  displayTimezone  String
+  accounts         AdAccount[]
+}
+
+model AdAccount {
+  id                String       @id @default(uuid()) @db.Uuid
+  platformAccountId String
+  marketCode        String
+  channel           ChannelCode
+  name              String
+  currencyCode      String
+  reportingTimezone String
+  status            String       @default("active")
+  connectedSource   ConnectedSource @default(mock)
+  attributionSettings Json?
+  market            Market       @relation(fields: [marketCode], references: [code])
+  campaigns         Campaign[]
+  conversionActions ConversionAction[]
+
+  @@unique([platformAccountId, channel])
+  @@index([marketCode, channel])
+}
+
+model Campaign {
+  id         String     @id @default(uuid()) @db.Uuid
+  accountId  String     @db.Uuid
+  platformId String
+  name       String
+  status     String
+  type       String     // Search|Performance Max|… or Meta objective
+  extra      Json?
+  account    AdAccount  @relation(fields: [accountId], references: [id])
+  adGroups   AdGroup[]
+
+  @@unique([accountId, platformId])
+}
+
+// Google ad groups AND Meta ad sets, discriminated by channel of the parent account.
+model AdGroup {
+  id         String   @id @default(uuid()) @db.Uuid
+  campaignId String   @db.Uuid
+  platformId String
+  name       String
+  status     String
+  extra      Json?
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  keywords   Keyword[]
+
+  @@unique([campaignId, platformId])
+}
+
+model Ad {
+  id         String  @id @default(uuid()) @db.Uuid
+  adGroupId  String  @db.Uuid
+  platformId String
+  name       String
+  status     String
+  strength   String?
+  creative   Creative?
+
+  @@unique([adGroupId, platformId])
+}
+
+model Keyword {
+  id                  String  @id @default(uuid()) @db.Uuid
+  adGroupId           String  @db.Uuid
+  platformCriterionId String
+  text                String
+  matchType           String
+  status              String
+  adGroup             AdGroup @relation(fields: [adGroupId], references: [id])
+
+  @@unique([adGroupId, platformCriterionId])
+}
+
+model Creative {
+  id                 String   @id @default(uuid()) @db.Uuid
+  adId               String   @unique @db.Uuid
+  format             String
+  primaryText        String?
+  headline           String?
+  thumbnailStoragePath String?
+  thumbnailFetchedAt DateTime?
+  sourceHash         String?
+  ad                 Ad       @relation(fields: [adId], references: [id])
+}
+
+enum LogicalMetric {
+  live_leads
+  leads
+  other
+}
+
+model ConversionAction {
+  id               String        @id @default(uuid()) @db.Uuid
+  accountId        String        @db.Uuid
+  platformActionId String
+  name             String
+  category         String
+  countingType     String?
+  account          AdAccount     @relation(fields: [accountId], references: [id])
+  mapping          ConversionActionMapping?
+
+  @@unique([accountId, platformActionId])
+}
+
+// A1 — admin-controlled definition of Live Leads / Leads.
+model ConversionActionMapping {
+  id                 String        @id @default(uuid()) @db.Uuid
+  conversionActionId String        @unique @db.Uuid
+  logicalMetric      LogicalMetric
+  mappedBy           String?       @db.Uuid
+  mappedAt           DateTime      @default(now())
+  conversionAction   ConversionAction @relation(fields: [conversionActionId], references: [id])
+}
+
+// ---- Facts (idempotent upserts on the natural-key grain) --------------------
+enum DataSource {
+  mock
+  windsor
+  direct
+}
+
+model StgSourcePayload {
+  id        String   @id @default(uuid()) @db.Uuid
+  source    String
+  report    String
+  accountId String   @db.Uuid
+  dateRange String
+  payload   Json
+  fetchedAt DateTime @default(now())
+  syncRunId String?  @db.Uuid
+
+  @@index([fetchedAt]) // 90-day TTL job
+}
+
+// date × account × level × entity × device × network/placement.
+// Device/network use an 'ALL' sentinel for unsegmented totals (queries pin segments).
+model FactDailyPerformance {
+  id               String     @id @default(uuid()) @db.Uuid
+  date             DateTime   @db.Date
+  accountId        String     @db.Uuid
+  level            String     // acct|campaign|ad_group|ad
+  entityId         String
+  device           String     @default("ALL")
+  networkPlacement String     @default("ALL")
+  impressions      BigInt     @default(0)
+  clicks           BigInt     @default(0)
+  linkClicks       BigInt     @default(0)
+  spend            Decimal    @default(0) @db.Decimal(14, 4)
+  conversions      Decimal    @default(0) @db.Decimal(14, 4)
+  conversionValue  Decimal    @default(0) @db.Decimal(14, 4)
+  landingPageViews BigInt     @default(0)
+  leadsPlatform    Decimal    @default(0) @db.Decimal(14, 4)
+  extra            Json?
+  source           DataSource @default(windsor)
+
+  @@unique([date, accountId, level, entityId, device, networkPlacement])
+  @@index([accountId, date])
+  @@index([entityId, date])
+}
+
+model FactConversionActionsDaily {
+  id                 String     @id @default(uuid()) @db.Uuid
+  date               DateTime   @db.Date
+  accountId          String     @db.Uuid
+  campaignId         String?
+  conversionActionId String     @db.Uuid
+  device             String     @default("ALL")
+  networkPlacement   String     @default("ALL")
+  conversions        Decimal    @default(0) @db.Decimal(14, 4)
+  value              Decimal    @default(0) @db.Decimal(14, 4)
+  source             DataSource @default(windsor)
+
+  @@unique([date, accountId, campaignId, conversionActionId, device, networkPlacement])
+  @@index([conversionActionId, date])
+}
+
+model FactKeywordDaily {
+  id          String     @id @default(uuid()) @db.Uuid
+  date        DateTime   @db.Date
+  keywordId   String     @db.Uuid
+  device      String     @default("ALL")
+  impressions BigInt     @default(0)
+  clicks      BigInt     @default(0)
+  spend       Decimal    @default(0) @db.Decimal(14, 4)
+  conversions Decimal    @default(0) @db.Decimal(14, 4)
+  liveLeads   Decimal    @default(0) @db.Decimal(14, 4) // pre-resolved during transform
+  source      DataSource @default(windsor)
+
+  @@unique([date, keywordId, device])
+  @@index([keywordId, date])
+}
+
+model FactSearchTermsDaily {
+  id              String     @id @default(uuid()) @db.Uuid
+  date            DateTime   @db.Date
+  accountId       String     @db.Uuid
+  campaignId      String?
+  adGroupId       String?
+  searchTerm      String
+  matchedKeywordId String?   @db.Uuid
+  matchType       String?
+  matchSource     String?
+  impressions     BigInt     @default(0)
+  clicks          BigInt     @default(0)
+  spend           Decimal    @default(0) @db.Decimal(14, 4)
+  conversions     Decimal    @default(0) @db.Decimal(14, 4)
+  liveLeads       Decimal    @default(0) @db.Decimal(14, 4)
+  source          DataSource @default(windsor)
+
+  @@unique([date, accountId, campaignId, adGroupId, searchTerm, matchedKeywordId])
+  @@index([accountId, date])
+}
+
+// The QS snapshot store (§11) — history only accrues from these daily snapshots.
+model FactQualityScoreDaily {
+  id               String     @id @default(uuid()) @db.Uuid
+  date             DateTime   @db.Date
+  keywordId        String     @db.Uuid
+  qualityScore     Int?
+  expectedCtr      String?
+  adRelevance      String?
+  lpExperience     String?
+  impressionsThatDay BigInt   @default(0)
+  source           DataSource @default(windsor)
+
+  @@unique([date, keywordId])
+  @@index([keywordId, date])
+  @@index([date, qualityScore])
+}
+
+model FactMetaBreakdownsDaily {
+  id             String     @id @default(uuid()) @db.Uuid
+  date           DateTime   @db.Date
+  accountId      String     @db.Uuid
+  level          String
+  entityId       String
+  breakdownType  String     // placement|device|country|audience
+  breakdownValue String
+  impressions    BigInt     @default(0)
+  linkClicks     BigInt     @default(0)
+  spend          Decimal    @default(0) @db.Decimal(14, 4)
+  leadsPlatform  Decimal    @default(0) @db.Decimal(14, 4)
+  extra          Json?
+  source         DataSource @default(windsor)
+
+  @@unique([date, accountId, level, entityId, breakdownType, breakdownValue])
+  @@index([accountId, date])
+}
+
+// Reach/frequency populated per requested window (non-additive, §12.1).
+model FactReachPeriod {
+  id          String     @id @default(uuid()) @db.Uuid
+  level       String
+  entityId    String
+  periodStart DateTime   @db.Date
+  periodEnd   DateTime   @db.Date
+  reach       BigInt     @default(0)
+  frequency   Decimal    @default(0) @db.Decimal(8, 4)
+  source      DataSource @default(windsor)
+
+  @@unique([level, entityId, periodStart, periodEnd])
+}
+
+// ---- Leads (NO PII) ---------------------------------------------------------
+enum LeadStatus {
+  new
+  live
+  invalid
+  duplicate
+  unmatched
+}
+
+model Lead {
+  id                String     @id @default(uuid()) @db.Uuid
+  externalLeadId    String     @unique
+  createdAtSource   DateTime
+  qualifiedAt       DateTime?
+  marketCode        String
+  channel           String?
+  matchedAccountId  String?    @db.Uuid
+  matchedCampaignId String?    @db.Uuid
+  matchedAdGroupId  String?    @db.Uuid
+  matchedAdId       String?    @db.Uuid
+  matchedKeywordId  String?    @db.Uuid
+  gclid             String?
+  gbraid            String?
+  wbraid            String?
+  fbclid            String?
+  callTrackingId    String?
+  matchMethod       String?
+  matchConfidence   Decimal?   @db.Decimal(4, 3)
+  currentStatus     LeadStatus @default(new)
+  value             Decimal?   @db.Decimal(14, 4)
+  history           LeadStatusHistory[]
+
+  @@index([createdAtSource])
+  @@index([matchedCampaignId])
+  @@index([currentStatus])
+}
+
+model LeadStatusHistory {
+  id     String     @id @default(uuid()) @db.Uuid
+  leadId String     @db.Uuid
+  status LeadStatus
+  at     DateTime   @default(now())
+  source String?
+  lead   Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+model LeadAdMapping {
+  clickId    String   @id
+  accountId  String?  @db.Uuid
+  campaignId String?  @db.Uuid
+  adGroupId  String?  @db.Uuid
+  adId       String?  @db.Uuid
+  keywordId  String?  @db.Uuid
+  resolvedAt DateTime @default(now())
+}
+
+// ---- Config & ops -----------------------------------------------------------
+enum BudgetScope {
+  account
+  campaign
+}
+
+enum PeriodType {
+  monthly
+  quarterly
+  custom
+}
+
+enum BudgetSource {
+  manual
+  csv
+  derived
+}
+
+model Budget {
+  id           String       @id @default(uuid()) @db.Uuid
+  scopeType    BudgetScope
+  scopeId      String
+  periodType   PeriodType   @default(monthly)
+  periodStart  DateTime     @db.Date
+  periodEnd    DateTime     @db.Date
+  amount       Decimal      @db.Decimal(14, 4)
+  currencyCode String
+  source       BudgetSource @default(manual)
+  enteredBy    String?      @db.Uuid
+  changes      BudgetChange[]
+
+  @@unique([scopeType, scopeId, periodStart, periodEnd])
+}
+
+model BudgetChange {
+  id        String   @id @default(uuid()) @db.Uuid
+  budgetId  String   @db.Uuid
+  oldAmount Decimal  @db.Decimal(14, 4)
+  newAmount Decimal  @db.Decimal(14, 4)
+  changedBy String?  @db.Uuid
+  at        DateTime @default(now())
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+enum TargetScope {
+  global
+  market
+  account
+  campaign
+}
+
+model Target {
+  id            String      @id @default(uuid()) @db.Uuid
+  scopeType     TargetScope
+  scopeId       String?
+  metric        String      // cpll|cpl|live_leads_volume|live_lead_rate|impression_share|min_qs|max_frequency
+  value         Decimal     @db.Decimal(14, 4)
+  period        String      @default("always")
+  effectiveFrom DateTime    @default(now())
+  effectiveTo   DateTime?
+
+  @@unique([scopeType, scopeId, metric, effectiveFrom])
+}
+
+model ExchangeRate {
+  date      DateTime @db.Date
+  baseCode  String
+  quoteCode String
+  rate      Decimal  @db.Decimal(16, 8)
+  source    String   @default("ECB")
+  stale     Boolean  @default(false)
+  fetchedAt DateTime @default(now())
+
+  @@id([date, baseCode, quoteCode])
+}
+
+enum SyncStatus {
+  running
+  ok
+  failed
+  partial
+}
+
+model SyncRun {
+  id           String     @id @default(uuid()) @db.Uuid
+  source       String
+  report       String
+  accountId    String?    @db.Uuid
+  windowFrom   DateTime?  @db.Date
+  windowTo     DateTime?  @db.Date
+  status       SyncStatus @default(running)
+  rowsUpserted Int        @default(0)
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  error        String?
+  checkpoint   Json?
+
+  @@index([source, finishedAt])
+}
+
+enum Severity {
+  info
+  warning
+  critical
+}
+
+model AlertRule {
+  id           String   @id @default(uuid()) @db.Uuid
+  templateCode String
+  scopeType    String
+  scopeId      String?
+  thresholds   Json
+  severity     Severity
+  enabled      Boolean  @default(true)
+  clientVisible Boolean @default(false)
+  alerts       Alert[]
+}
+
+enum AlertState {
+  open
+  acknowledged
+  resolved
+}
+
+model Alert {
+  id             String     @id @default(uuid()) @db.Uuid
+  ruleId         String     @db.Uuid
+  entityType     String
+  entityId       String
+  triggeredAt    DateTime   @default(now())
+  resolvedAt     DateTime?
+  currentValue   String?
+  thresholdValue String?
+  status         AlertState @default(open)
+  ackedBy        String?    @db.Uuid
+  rule           AlertRule  @relation(fields: [ruleId], references: [id])
+
+  @@index([status, triggeredAt])
+}
+
+model Annotation {
+  id         String   @id @default(uuid()) @db.Uuid
+  scopeType  String
+  scopeId    String?
+  date       DateTime @db.Date
+  type       String   // launch|budget_change|tracking|landing_page|bidding|external
+  text       String   @db.VarChar(280)
+  author     String?  @db.Uuid
+  visibility String   @default("internal") // internal|client_visible
+  createdAt  DateTime @default(now())
+}
+
+model SavedView {
+  id       String  @id @default(uuid()) @db.Uuid
+  userId   String  @db.Uuid
+  tableKey String
+  name     String
+  config   Json
+  shared   Boolean @default(false)
+}

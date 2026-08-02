@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
+/**
+ * LegalVision design tokens — Framework §22.
+ * Every colour is a CSS variable so brand assets drop in via one token file.
+ * v1 ships the neutral-premium fallback palette (primary = deep navy-indigo).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* brand */
+  --lv-primary: #23306b;
+  --lv-primary-hover: #1a2452;
+  --lv-primary-subtle: #eef0f9;
+
+  /* neutrals (slate ramp) */
+  --lv-text: #0f172a;
+  --lv-text-secondary: #475569;
+  --lv-muted: #94a3b8;
+  --lv-border: #e2e8f0;
+  --lv-canvas: #f8fafc;
+  --lv-card: #ffffff;
+  --lv-row-hover: #f1f5f9;
+
+  /* semantic */
+  --lv-success: #15803d;
+  --lv-warning: #b45309;
+  --lv-danger: #b91c1c;
+  --lv-info: #1d4ed8;
+  --lv-purple: #6d28d9; /* Under-delivering */
+
+  /* LegalVision brand (from brand assets): deep teal-navy + orange accent */
+  --lv-sidebar: #0a2e3a;
+  --lv-sidebar-hover: #123a48;
+  --lv-sidebar-active: #16404f;
+  --lv-accent: #f1531c;
+  --lv-accent-hover: #d9450f;
+
+  /* channel + market hues (fixed everywhere) */
+  --lv-google: #2563eb;
+  --lv-meta: #0ea5e9;
+  --lv-au: #23306b;
+  --lv-uk: #7c3aed;
+  --lv-nz: #0d9488;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: var(--lv-primary);
+  --color-primary-hover: var(--lv-primary-hover);
+  --color-primary-subtle: var(--lv-primary-subtle);
+  --color-ink: var(--lv-text);
+  --color-secondary: var(--lv-text-secondary);
+  --color-muted: var(--lv-muted);
+  --color-border: var(--lv-border);
+  --color-canvas: var(--lv-canvas);
+  --color-card: var(--lv-card);
+  --color-rowhover: var(--lv-row-hover);
+  --color-success: var(--lv-success);
+  --color-warning: var(--lv-warning);
+  --color-danger: var(--lv-danger);
+  --color-info: var(--lv-info);
+  --color-purple: var(--lv-purple);
+  --color-google: var(--lv-google);
+  --color-meta: var(--lv-meta);
+  --color-accent: var(--lv-accent);
+  --color-au: var(--lv-au);
+  --color-uk: var(--lv-uk);
+  --color-nz: var(--lv-nz);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 10px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--lv-border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--lv-canvas);
+  color: var(--lv-text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
 }
+
+/* tabular numbers everywhere numbers matter */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* focus ring (§23) */
+:focus-visible {
+  outline: 2px solid var(--lv-primary);
+  outline-offset: 2px;
+}
+
+/* skeleton shimmer */
+@keyframes lv-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.lv-skeleton {
+  background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 37%, #eef2f7 63%);
+  background-size: 800px 100%;
+  animation: lv-shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-skeleton { animation: none; }
+}
+
+/* thin scrollbars for tables */
+.lv-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
+.lv-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+.lv-scroll::-webkit-scrollbar-track { background: transparent; }

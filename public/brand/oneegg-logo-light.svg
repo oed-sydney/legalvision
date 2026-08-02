@@ -1,0 +1,9 @@
+<svg width="340" height="92" viewBox="0 0 340 92" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- egg -->
+  <path d="M46 5 C66 5 84 33 84 57 C84 77 67 88 46 88 C25 88 8 77 8 57 C8 33 26 5 46 5 Z" fill="#F4731C"/>
+  <!-- trend arrow -->
+  <path d="M20 64 L36 47 L45 55 L62 34" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M49 26 L72 22 L66 45 Z" fill="#ffffff"/>
+  <!-- wordmark -->
+  <text x="100" y="70" font-family="'Poppins', 'Nunito Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="66" font-weight="800" letter-spacing="-1" fill="#ffffff">OneEgg</text>
+</svg>
