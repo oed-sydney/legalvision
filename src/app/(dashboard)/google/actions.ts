@@ -20,7 +20,7 @@ export async function decideNegative(input: {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   if (!ACCOUNT_BY_ID[parsed.data.accountId]) return { ok: false, error: "Unknown account." };
-  setNegativeDecision(parsed.data.accountId, parsed.data.term, parsed.data.status);
+  await setNegativeDecision(parsed.data.accountId, parsed.data.term, parsed.data.status);
   revalidatePath("/google");
   return { ok: true };
 }

@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 
 export default async function PlanPage() {
   const report = await planReport();
-  const state = readPlanState();
+  const state = await readPlanState();
   const snapshot = readClickUpSnapshot();
   const meetings = readMeetingsSnapshot();
 
@@ -69,7 +69,7 @@ export default async function PlanPage() {
 
       <PanelTabs
         tabs={[
-          { key: "plan", label: "Strategy & KPIs", panel: <PlanPanel report={report} /> },
+          { key: "plan", label: "Strategy & KPIs", panel: <PlanPanel report={report} state={state} /> },
           {
             key: "meetings",
             label: `Meetings${meetings ? ` (${meetings.meetings.length})` : ""}`,
@@ -88,8 +88,13 @@ export default async function PlanPage() {
 
 // ---------------- Strategy & KPIs ----------------
 
-function PlanPanel({ report }: { report: Awaited<ReturnType<typeof planReport>> }) {
-  const state = readPlanState();
+function PlanPanel({
+  report,
+  state,
+}: {
+  report: Awaited<ReturnType<typeof planReport>>;
+  state: Awaited<ReturnType<typeof readPlanState>>;
+}) {
   return (
     <div className="space-y-6">
       {MARKET_SECTIONS.map((section) => {

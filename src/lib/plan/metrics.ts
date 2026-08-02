@@ -1,7 +1,6 @@
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
 import { fetchGoogleAuctionDaily, fetchGoogleDailyRange, windsorConfigured } from "../adapters/windsor-rest";
+import { kvGet, kvSet } from "../data/kv";
 import { NAME_TO_ACCT } from "../data/real/build";
 import { ACCOUNT_BY_ID } from "../domain/accounts";
 import { PLAN, PLAN_KPIS, type PlanKpiDef } from "./definition";
@@ -15,7 +14,7 @@ import { safeRatio } from "../metrics/format";
  * older than MAX_AGE. Without WINDSOR_API_KEY the last cache keeps serving.
  */
 
-const CACHE_PATH = path.join(process.cwd(), "data", "plan-cache.json");
+const CACHE_KEY = "plan-cache";
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 interface MonthAgg {
@@ -93,27 +92,22 @@ export async function refreshPlanCache(): Promise<{ months: number }> {
   }
 
   const cache: PlanCache = { builtAt: new Date().toISOString(), months };
-  fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2), "utf8");
+  await kvSet(CACHE_KEY, cache);
   return { months: Object.values(months).reduce((n, m) => n + Object.keys(m).length, 0) };
 }
 
-function readCache(): PlanCache | null {
-  try {
-    return JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) as PlanCache;
-  } catch {
-    return null;
-  }
+async function readCache(): Promise<PlanCache | null> {
+  return kvGet<PlanCache | null>(CACHE_KEY, null);
 }
 
 async function cachedMonths(): Promise<PlanCache | null> {
-  const cache = readCache();
+  const cache = await readCache();
   const fresh = cache && Date.now() - Date.parse(cache.builtAt) < MAX_AGE_MS;
   if (fresh) return cache;
   if (windsorConfigured()) {
     try {
       await refreshPlanCache();
-      return readCache();
+      return await readCache();
     } catch {
       return cache; // stale beats nothing if Windsor is unreachable
     }
@@ -227,7 +221,7 @@ function judge(
 export async function planReport(now = new Date()): Promise<PlanReport> {
   const months = planMonths(now);
   const cache = await cachedMonths();
-  const state = readPlanState();
+  const state = await readPlanState();
 
   const kpis: KpiRow[] = PLAN_KPIS.map((def) => {
     const values = months.map((m) => {

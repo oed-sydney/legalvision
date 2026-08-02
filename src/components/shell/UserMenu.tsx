@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -75,6 +76,14 @@ export function UserMenu({
               {ROLE_LABEL[role] ?? role}
             </span>
           </div>
+          <Link
+            href="/account"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 border-b border-[var(--lv-border)] px-4 py-2.5 text-left text-[13px] font-medium text-[var(--lv-text)] transition hover:bg-[var(--lv-row-hover)]"
+          >
+            <Settings className="h-4 w-4" />
+            Account
+          </Link>
           <button
             onClick={signOut}
             disabled={busy}

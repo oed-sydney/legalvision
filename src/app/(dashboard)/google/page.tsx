@@ -70,6 +70,7 @@ export default async function GooglePage({
   const { scored: scoredTerms, base: termBase } = scoreSearchTerms(liveTerms);
   const { scored: scoredKws } = scoreKeywords(liveKws);
   const negatives = usingLive ? buildNegatives(liveTerms, scoredTerms, termBase) : [];
+  const negativesApprovals = usingLive ? await readNegativesApprovals() : {};
 
   const stSource = usingLive ? liveTerms : searchTerms()
     .filter((s) => (f.country === "all" || s.market === f.country) && (f.account === "all" || s.accountId === f.account));
@@ -249,7 +250,7 @@ export default async function GooglePage({
             label: "Search terms",
             panel: (
               <div className="space-y-4">
-                {usingLive && <NegativesPanel accounts={negatives} approvals={readNegativesApprovals()} />}
+                {usingLive && <NegativesPanel accounts={negatives} approvals={negativesApprovals} />}
                 {usingLive && <TermScorePanel terms={scoredTerms} keywords={scoredKws} />}
                 <Card>
                   <CardTitle

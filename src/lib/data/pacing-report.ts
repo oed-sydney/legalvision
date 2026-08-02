@@ -5,7 +5,7 @@ import { computePacing, type PacingResult, type PacingStatus } from "../pacing/e
 import { convertAndSum, type Money } from "../currency/guard";
 import { fxTable } from "../currency/fx";
 import { APP_NOW, LATEST_COMPLETE_DAY, dateRangeList } from "./mock";
-import { budgetFor } from "./budgets-store";
+import { budgetAmounts } from "./budgets-store";
 import { campaignMetas } from "./source";
 import { queryCampaignDaily } from "./warehouse";
 import type { FilterState } from "../filters/schema";
@@ -60,17 +60,17 @@ function trailing7(byDay: Map<string, number>): number {
   return vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1);
 }
 
-export function pacingAccounts(f: FilterState): PacingAccountRow[] {
+export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]> {
+  const amounts = await budgetAmounts();
   const rows: PacingAccountRow[] = [];
   for (const acct of AD_ACCOUNTS) {
     if (f.country !== "all" && acct.market !== f.country) continue;
     if (f.channel !== "all" && acct.channel !== f.channel) continue;
     const { total, byDay } = spendJuly(acct.id);
-    const b = budgetFor(acct.id);
     const pacing = computePacing({
       periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
-      budget: b?.amount ?? null,
+      budget: amounts[acct.id] ?? null,
       spend: total,
       now: APP_NOW,
       timezone: acct.reportingTimezone,

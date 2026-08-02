@@ -1,11 +1,10 @@
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
 import { SNAPSHOT_PULLED_AT } from "./real/snapshot";
+import { kvGet, kvSet } from "./kv";
 
 /** Tracks the last data refresh so the freshness chip + refresh button stay in sync. */
 
-const STATE_PATH = path.join(process.cwd(), "data", "sync-state.json");
+const KV_KEY = "sync-state";
 
 export interface SyncState {
   lastSyncedAt: string; // ISO
@@ -20,15 +19,10 @@ const DEFAULT: SyncState = {
   rowsGoogle: 0,
 };
 
-export function readSyncState(): SyncState {
-  try {
-    return { ...DEFAULT, ...(JSON.parse(fs.readFileSync(STATE_PATH, "utf8")) as SyncState) };
-  } catch {
-    return DEFAULT;
-  }
+export async function readSyncState(): Promise<SyncState> {
+  return { ...DEFAULT, ...(await kvGet<Partial<SyncState>>(KV_KEY, {})) };
 }
 
-export function writeSyncState(s: SyncState): void {
-  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
-  fs.writeFileSync(STATE_PATH, JSON.stringify(s, null, 2), "utf8");
+export async function writeSyncState(s: SyncState): Promise<void> {
+  await kvSet(KV_KEY, s);
 }

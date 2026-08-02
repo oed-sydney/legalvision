@@ -5,7 +5,7 @@ import { computePacing, type PacingResult } from "../pacing/engine";
 import { fxTable } from "../currency/fx";
 import { convertAndSum, type Money } from "../currency/guard";
 import { APP_NOW, LATEST_COMPLETE_DAY } from "./mock";
-import { budgetFor } from "./budgets-store";
+import { budgetAmounts } from "./budgets-store";
 import { computeTotals, queryCampaignDaily, type Totals } from "./warehouse";
 import type { FilterState } from "../filters/schema";
 
@@ -65,7 +65,7 @@ export interface MarketPacing {
 }
 
 /** Budget pacing per market for July (native, single currency per market). */
-export function marketPacing(f: FilterState): {
+export async function marketPacing(f: FilterState): Promise<{
   markets: MarketPacing[];
   overall: {
     budget: number;
@@ -75,7 +75,8 @@ export function marketPacing(f: FilterState): {
     estimated: boolean;
     currency: CurrencyCode;
   };
-} {
+}> {
+  const amounts = await budgetAmounts();
   const markets: MarketPacing[] = [];
   const budgetMoney: Money[] = [];
   const spendMoney: Money[] = [];
@@ -90,7 +91,7 @@ export function marketPacing(f: FilterState): {
     let spend = 0;
     let projected = 0;
     for (const acct of accts) {
-      const b = budgetFor(acct.id);
+      const acctBudget = amounts[acct.id] ?? null;
       const rows = queryCampaignDaily({
         from: "2026-07-01",
         to: LATEST_COMPLETE_DAY,
@@ -100,12 +101,12 @@ export function marketPacing(f: FilterState): {
       const pac = computePacing({
         periodStart: "2026-07-01",
         periodEnd: "2026-07-31",
-        budget: b?.amount ?? null,
+        budget: acctBudget,
         spend: acctSpend,
         now: APP_NOW,
         timezone: acct.reportingTimezone,
       });
-      budget += b?.amount ?? 0;
+      budget += acctBudget ?? 0;
       spend += acctSpend;
       projected += pac.projectedSpend ?? acctSpend;
     }

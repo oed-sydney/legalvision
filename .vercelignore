@@ -1,0 +1,7 @@
+# Never upload secrets or real client data to Vercel builds.
+.env
+.env.*
+/data/
+.git
+node_modules
+.next

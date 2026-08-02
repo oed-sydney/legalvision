@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }));
 
   const runs = syncRuns();
-  const sync = readSyncState();
+  const sync = await readSyncState();
   // Freshness relative to the last refresh (real wall-clock), falling back to snapshot time.
   const lastSyncedHours = Math.max(0, (Date.now() - new Date(sync.lastSyncedAt).getTime()) / 3_600_000);
   const sources = runs

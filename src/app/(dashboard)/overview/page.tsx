@@ -29,7 +29,7 @@ export default async function OverviewPage({
   const cur = t.currency;
   const est = t.estimated;
 
-  const pacing = marketPacing(f);
+  const pacing = await marketPacing(f);
   const markets = marketTotals(f, range.from, range.to);
 
   const spendSeries = trend.points.map((x) => x.spend);

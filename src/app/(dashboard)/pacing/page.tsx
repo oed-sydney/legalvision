@@ -23,7 +23,7 @@ export default async function PacingPage({
   searchParams: Promise<Record<string, string>>;
 }) {
   const f = parseFilters(await searchParams);
-  const accounts = pacingAccounts(f);
+  const accounts = await pacingAccounts(f);
   const markets = pacingMarkets(accounts);
   const overall = pacingOverall(markets);
   const curve = pacingCurve(f, overall);

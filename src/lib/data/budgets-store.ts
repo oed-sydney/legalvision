@@ -1,18 +1,16 @@
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
 import { AD_ACCOUNTS } from "../domain/accounts";
 import type { Budget, CurrencyCode } from "../domain/types";
+import { kvGet, kvSet } from "./kv";
 
 /**
- * Per-account monthly budgets, persisted to data/budgets.json (admin-editable via the
+ * Per-account monthly budgets, persisted in Postgres (`app_kv` key "budgets", via the
  * Admin → Budgets UI). Falls back to seeded defaults keyed to real spend run-rate.
- * In production this table lives in Postgres (`budgets` + `budget_changes`, §17).
  */
 
 const PERIOD_START = "2026-07-01";
 const PERIOD_END = "2026-07-31";
-const STORE_PATH = path.join(process.cwd(), "data", "budgets.json");
+const KV_KEY = "budgets";
 
 // Seed defaults (native currency) ≈ actual monthly run-rate (spend-to-date ÷ elapsed)
 // from the real July pull, so out-of-box pacing is sensible. Override in Admin → Budgets.
@@ -27,24 +25,19 @@ const DEFAULTS: Record<string, number> = {
 
 type StoredBudgets = Record<string, number>;
 
-function readStore(): StoredBudgets {
-  try {
-    const raw = fs.readFileSync(STORE_PATH, "utf8");
-    return JSON.parse(raw) as StoredBudgets;
-  } catch {
-    return {};
-  }
+async function readStore(): Promise<StoredBudgets> {
+  return kvGet<StoredBudgets>(KV_KEY, {});
 }
 
-export function budgetAmounts(): Record<string, number> {
-  const stored = readStore();
+export async function budgetAmounts(): Promise<Record<string, number>> {
+  const stored = await readStore();
   const out: Record<string, number> = { ...DEFAULTS };
   for (const [k, v] of Object.entries(stored)) out[k] = v;
   return out;
 }
 
-export function allBudgets(): Budget[] {
-  const amounts = budgetAmounts();
+export async function allBudgets(): Promise<Budget[]> {
+  const amounts = await budgetAmounts();
   return AD_ACCOUNTS.map((acct) => ({
     id: `${acct.id}-2026-07`,
     scopeType: "account" as const,
@@ -57,14 +50,13 @@ export function allBudgets(): Budget[] {
   }));
 }
 
-export function budgetFor(accountId: string): Budget | undefined {
-  return allBudgets().find((b) => b.scopeId === accountId);
+export async function budgetFor(accountId: string): Promise<Budget | undefined> {
+  return (await allBudgets()).find((b) => b.scopeId === accountId);
 }
 
 /** Persist a single account's monthly budget (called by the Admin server action). */
-export function setBudget(accountId: string, amount: number): void {
-  const store = readStore();
+export async function setBudget(accountId: string, amount: number): Promise<void> {
+  const store = await readStore();
   store[accountId] = amount;
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+  await kvSet(KV_KEY, store);
 }

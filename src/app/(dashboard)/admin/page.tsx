@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { PanelTabs } from "@/components/ui/PanelTabs";
@@ -5,15 +6,21 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { AD_ACCOUNTS, marketName } from "@/lib/domain/accounts";
 import { targets } from "@/lib/data/mock";
 import { allBudgets as budgets } from "@/lib/data/budgets-store";
-import { syncRuns, users, hoursSince } from "@/lib/data/ops";
+import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { BudgetEditor } from "@/components/admin/BudgetEditor";
+import { InviteUserForm } from "@/components/admin/InviteUserForm";
+import { getSessionProfile } from "@/lib/auth/session";
+import { listAppUsers } from "@/lib/auth/users";
 
 const ROLE_TONE = { admin: "info", internal: "success", client: "purple", viewer: "grey" } as const;
 
-export default function AdminPage() {
-  const budgetRows = budgets();
+export default async function AdminPage() {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") redirect("/overview");
+
+  const budgetRows = await budgets();
   const targetRows = targets();
-  const userRows = users();
+  const userRows = await listAppUsers();
   const runs = syncRuns();
 
   return (
@@ -26,16 +33,17 @@ export default function AdminPage() {
             label: "Users & roles",
             panel: (
               <Card>
-                <CardTitle action={<button className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-white">Invite user</button>}>
-                  Users &amp; roles
-                </CardTitle>
+                <CardTitle>Users &amp; roles</CardTitle>
+                <div className="mb-4">
+                  <InviteUserForm />
+                </div>
                 <Table
                   head={["Name", "Email", "Role", "Scope", "Lead records", "Status", "Last login"]}
                   rows={userRows.map((u) => [
-                    u.name,
+                    u.name ?? "—",
                     u.email,
                     <StatusPill key={u.id} tone={ROLE_TONE[u.role]} dot={false}>{u.role}</StatusPill>,
-                    u.scopes.length ? u.scopes.join(", ") : "All",
+                    u.markets.length ? u.markets.join(", ") : "All",
                     u.leadRecordAccess ? "Yes" : "No",
                     <StatusPill key={u.id + "s"} tone={u.status === "active" ? "success" : u.status === "invited" ? "warning" : "grey"} dot={false}>{u.status}</StatusPill>,
                     u.lastLoginAt ? new Date(u.lastLoginAt).toISOString().slice(0, 10) : "—",

@@ -15,7 +15,7 @@ export async function saveTaskStatus(input: { taskId: string; status: string }) 
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid status." };
   if (!TASK_BY_ID[parsed.data.taskId]) return { ok: false, error: "Unknown task." };
-  setTaskStatus(parsed.data.taskId, parsed.data.status);
+  await setTaskStatus(parsed.data.taskId, parsed.data.status);
   revalidatePath("/plan");
   return { ok: true };
 }
@@ -32,7 +32,7 @@ export async function saveManualKpi(input: { kpiId: string; month: string; value
   if (!parsed.success) return { ok: false, error: "Invalid value." };
   const def = KPI_BY_ID[parsed.data.kpiId];
   if (!def || def.metric !== "manual") return { ok: false, error: "Not a manual KPI." };
-  setManualValue(parsed.data.kpiId, parsed.data.month, parsed.data.value);
+  await setManualValue(parsed.data.kpiId, parsed.data.month, parsed.data.value);
   revalidatePath("/plan");
   return { ok: true };
 }

@@ -24,7 +24,7 @@ export async function POST() {
       try {
         await refreshTermsCache();
       } catch {}
-      writeSyncState({
+      await writeSyncState({
         lastSyncedAt: now,
         mode: "live",
         rowsGoogle: rows,
@@ -33,8 +33,8 @@ export async function POST() {
       ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
       return NextResponse.json({ ok: true, mode: "live", rowsGoogle: rows, days, syncedAt: now });
     }
-    const prev = readSyncState();
-    writeSyncState({
+    const prev = await readSyncState();
+    await writeSyncState({
       ...prev,
       lastSyncedAt: now,
       mode: "snapshot",
@@ -47,13 +47,33 @@ export async function POST() {
       hint: "Set WINDSOR_API_KEY to enable live Google refresh; META_SYSTEM_USER_TOKEN for Meta.",
     });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Sync failed" },
-      { status: 502 }
-    );
+    // Live pull needs a writable cache; on read-only serverless hosts it can't persist.
+    // Degrade to a snapshot re-stamp so the button still succeeds against baked data.
+    try {
+      const prev = await readSyncState();
+      await writeSyncState({
+        ...prev,
+        lastSyncedAt: now,
+        mode: "snapshot",
+        note: "Live refresh unavailable in this environment — serving the latest snapshot.",
+      });
+      ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
+      return NextResponse.json({
+        ok: true,
+        mode: "snapshot",
+        syncedAt: now,
+        note: "Live refresh unavailable here; snapshot re-validated.",
+        detail: err instanceof Error ? err.message : undefined,
+      });
+    } catch (err2) {
+      return NextResponse.json(
+        { ok: false, error: err2 instanceof Error ? err2.message : "Sync failed" },
+        { status: 502 }
+      );
+    }
   }
 }
 
 export async function GET() {
-  return NextResponse.json(readSyncState());
+  return NextResponse.json(await readSyncState());
 }
