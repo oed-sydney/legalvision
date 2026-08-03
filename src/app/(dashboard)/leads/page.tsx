@@ -4,6 +4,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { ComboTrend } from "@/components/charts/ComboTrend";
 import { parseFilters } from "@/lib/filters/schema";
+import { hydrateLiveData } from "@/lib/data/source";
 import { buildReport } from "@/lib/data/report";
 import { marketTotals } from "@/lib/data/overview";
 import { marketName } from "@/lib/domain/accounts";
@@ -14,6 +15,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await hydrateLiveData();
   const f = parseFilters(await searchParams);
   const report = buildReport(f);
   const t = report.totals;

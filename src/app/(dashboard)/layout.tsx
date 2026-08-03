@@ -5,13 +5,14 @@ import { FilterBar, type AccountOpt, type CampaignOpt } from "@/components/shell
 import { FreshnessChip } from "@/components/shell/FreshnessChip";
 import { RefreshButton } from "@/components/shell/RefreshButton";
 import { AD_ACCOUNTS } from "@/lib/domain/accounts";
-import { campaignMetas } from "@/lib/data/source";
+import { campaignMetas, hydrateLiveData } from "@/lib/data/source";
 import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { readSyncState } from "@/lib/data/sync-state";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { getSessionProfile } from "@/lib/auth/session";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  await hydrateLiveData();
   const profile = await getSessionProfile();
   const accounts: AccountOpt[] = AD_ACCOUNTS.map((a) => ({
     id: a.id,

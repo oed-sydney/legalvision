@@ -6,6 +6,7 @@ import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsT
 import { parseFilters } from "@/lib/filters/schema";
 import { buildReport } from "@/lib/data/report";
 import { marketPacing, marketTotals } from "@/lib/data/overview";
+import { hydrateLiveData } from "@/lib/data/source";
 import { alerts } from "@/lib/data/ops";
 import { marketName } from "@/lib/domain/accounts";
 import {
@@ -23,6 +24,7 @@ export default async function OverviewPage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await hydrateLiveData();
   const f = parseFilters(await searchParams);
   const report = buildReport(f);
   const { totals: t, prevTotals: p, trend, range, compareLabel } = report;

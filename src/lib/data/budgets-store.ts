@@ -2,14 +2,14 @@ import "server-only";
 import { AD_ACCOUNTS } from "../domain/accounts";
 import type { Budget, CurrencyCode } from "../domain/types";
 import { kvGet, kvSet } from "./kv";
+import { currentPeriod } from "./period";
 
 /**
  * Per-account monthly budgets, persisted in Postgres (`app_kv` key "budgets", via the
  * Admin → Budgets UI). Falls back to seeded defaults keyed to real spend run-rate.
+ * The period is the current calendar month (auto-advances).
  */
 
-const PERIOD_START = "2026-07-01";
-const PERIOD_END = "2026-07-31";
 const KV_KEY = "budgets";
 
 // Seed defaults (native currency) ≈ actual monthly run-rate (spend-to-date ÷ elapsed)
@@ -38,12 +38,13 @@ export async function budgetAmounts(): Promise<Record<string, number>> {
 
 export async function allBudgets(): Promise<Budget[]> {
   const amounts = await budgetAmounts();
+  const period = currentPeriod();
   return AD_ACCOUNTS.map((acct) => ({
-    id: `${acct.id}-2026-07`,
+    id: `${acct.id}-${period.ym}`,
     scopeType: "account" as const,
     scopeId: acct.id,
-    periodStart: PERIOD_START,
-    periodEnd: PERIOD_END,
+    periodStart: period.start,
+    periodEnd: period.end,
     amount: amounts[acct.id] ?? 0,
     currency: acct.currency as CurrencyCode,
     source: "manual" as const,

@@ -5,6 +5,7 @@ import { PanelTabs } from "@/components/ui/PanelTabs";
 import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsTable";
 import { CreativesGrid, type CreativeCard } from "@/components/panels/CreativesGrid";
 import { parseFilters, type FilterState } from "@/lib/filters/schema";
+import { hydrateLiveData } from "@/lib/data/source";
 import { buildReport } from "@/lib/data/report";
 import { realMetaCreatives } from "@/lib/data/real/meta-creatives";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
@@ -14,6 +15,7 @@ export default async function MetaPage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await hydrateLiveData();
   const raw = parseFilters(await searchParams);
   const f: FilterState = { ...raw, channel: "meta_ads" }; // Meta-only area
   const report = buildReport(f);

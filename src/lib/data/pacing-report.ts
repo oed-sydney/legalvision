@@ -8,10 +8,12 @@ import { APP_NOW, LATEST_COMPLETE_DAY, dateRangeList } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { campaignMetas } from "./source";
 import { queryCampaignDaily } from "./warehouse";
+import { currentPeriod } from "./period";
 import type { FilterState } from "../filters/schema";
 
-const PERIOD_START = "2026-07-01";
-const PERIOD_END = "2026-07-31";
+// Active pacing window = current calendar month (auto-advances each month).
+const { start: PERIOD_START, end: PERIOD_END, label: PERIOD_LABEL } = currentPeriod(APP_NOW);
+export { PERIOD_LABEL };
 
 export interface PacingAccountRow {
   accountId: string;

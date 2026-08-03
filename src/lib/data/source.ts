@@ -7,11 +7,15 @@ import {
 } from "./mock";
 import { buildRealCampaignDaily } from "./real/build";
 import { liveCacheStamp, readLiveCache } from "./live-sync";
+import { kvGet } from "./kv";
 
 /**
- * Source switch: REAL platform data by default. Prefers the LIVE Windsor cache (written
- * by the refresh button) so the whole app reflects the latest pull; falls back to the
- * baked snapshot. Set USE_REAL_DATA=false for the isolated mock warehouse.
+ * Source switch: REAL platform data by default. Data precedence:
+ *   1. Postgres live cache (`app_kv` "live-cache") — the serverless-safe live pull,
+ *      hydrated per request via hydrateLiveData().
+ *   2. Filesystem live cache (local dev, written by the refresh button).
+ *   3. Baked snapshot.
+ * Set USE_REAL_DATA=false for the isolated mock warehouse.
  */
 const USE_REAL = process.env.USE_REAL_DATA !== "false";
 
@@ -19,8 +23,34 @@ let _rows: CampaignDaily[] | null = null;
 let _key: string | number | null = null;
 let _metas: CampaignMetaLite[] | null = null;
 
+// KV-hydrated live rows — the serverless path (read-only filesystem). Shared across
+// requests (the ad data is global, not per-user) and refreshed on a short TTL.
+let _kvRows: CampaignDaily[] | null = null;
+let _kvLoadedAt = 0;
+const KV_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Load the live campaign cache from Postgres. Call (await) before reading campaignDaily
+ * on a request path so serverless renders reflect the latest pull. No-op off the TTL.
+ */
+export async function hydrateLiveData(): Promise<void> {
+  if (!USE_REAL) return;
+  if (_kvRows && Date.now() - _kvLoadedAt < KV_TTL_MS) return;
+  try {
+    const cache = await kvGet<{ rows: CampaignDaily[] } | null>("live-cache", null);
+    if (cache?.rows?.length) {
+      _kvRows = cache.rows;
+      _kvLoadedAt = Date.now();
+      _metas = null; // invalidate derived campaign list
+    }
+  } catch {
+    // keep whatever we already had (snapshot or prior KV load)
+  }
+}
+
 export function campaignDaily(): CampaignDaily[] {
   if (!USE_REAL) return mockCampaignDaily();
+  if (_kvRows && _kvRows.length) return _kvRows; // Postgres live cache (serverless)
   const stamp = liveCacheStamp();
   const key = stamp ?? "static";
   if (_key !== key) {

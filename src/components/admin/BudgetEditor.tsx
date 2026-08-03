@@ -16,7 +16,7 @@ export interface BudgetRow {
 }
 
 /** Editable per-account monthly budget grid (AU/UK/NZ × Google/Meta). */
-export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
+export function BudgetEditor({ rows, periodLabel }: { rows: BudgetRow[]; periodLabel: string }) {
   return (
     <div className="overflow-x-auto lv-scroll">
       <table className="w-full text-[13px]">
@@ -32,7 +32,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <BudgetInputRow key={r.accountId} row={r} />
+            <BudgetInputRow key={r.accountId} row={r} periodLabel={periodLabel} />
           ))}
         </tbody>
       </table>
@@ -43,7 +43,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
   );
 }
 
-function BudgetInputRow({ row }: { row: BudgetRow }) {
+function BudgetInputRow({ row, periodLabel }: { row: BudgetRow; periodLabel: string }) {
   const [value, setValue] = useState(String(row.amount));
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -65,7 +65,7 @@ function BudgetInputRow({ row }: { row: BudgetRow }) {
       <td className="py-2.5 pr-3 font-medium text-ink">{row.accountLabel}</td>
       <td className="px-3 py-2.5 text-secondary">{row.market}</td>
       <td className="px-3 py-2.5 text-secondary">{row.channel}</td>
-      <td className="px-3 py-2.5 text-secondary">Jul 2026</td>
+      <td className="px-3 py-2.5 text-secondary">{periodLabel}</td>
       <td className="px-3 py-2.5 text-right">
         <div className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 focus-within:border-primary">
           <span className="text-muted">{CURRENCY_SYMBOL[row.currency]}</span>

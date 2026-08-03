@@ -13,6 +13,8 @@ import {
   pacingMarkets,
   pacingOverall,
 } from "@/lib/data/pacing-report";
+import { currentPeriod } from "@/lib/data/period";
+import { hydrateLiveData } from "@/lib/data/source";
 import { marketName } from "@/lib/domain/accounts";
 import { CURRENCY_SYMBOL, formatMoney, formatPercent } from "@/lib/metrics/format";
 import { PACING_STATUS_LABEL } from "@/lib/pacing/engine";
@@ -22,6 +24,7 @@ export default async function PacingPage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await hydrateLiveData();
   const f = parseFilters(await searchParams);
   const accounts = await pacingAccounts(f);
   const markets = pacingMarkets(accounts);
@@ -52,7 +55,7 @@ export default async function PacingPage({
     <div>
       <PageHeader
         title="Budget Pacing"
-        subtitle="Period: July 2026 (calendar month, account-local) · completed-days basis"
+        subtitle={`Period: ${currentPeriod().label} (calendar month, account-local) · completed-days basis`}
         actions={
           <a
             href="/admin"

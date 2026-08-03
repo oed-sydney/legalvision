@@ -15,6 +15,7 @@ import {
   fetchGoogleCampaignDaily,
   fetchGoogleCampaignLiveLeadsDaily,
 } from "../adapters/windsor-rest";
+import { kvSet } from "./kv";
 
 /**
  * Live refresh: pull fresh Google data from Windsor REST at TRUE campaign × date grain
@@ -88,8 +89,15 @@ export async function syncGoogleLive(datePreset = "last_90d"): Promise<{ rows: n
   rows.push(...metaRows);
 
   const cache: LiveCache = { builtAt: new Date().toISOString(), rows };
-  fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), "utf8");
+  // Durable store (works on serverless) — the app reads this via hydrateLiveData().
+  await kvSet("live-cache", cache);
+  // Local filesystem cache too (fast path for dev); ignore on read-only hosts.
+  try {
+    fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), "utf8");
+  } catch {
+    // read-only filesystem (e.g. Vercel) — Postgres copy above is the source of truth
+  }
   return { rows: rows.length, days: days.length };
 }
 

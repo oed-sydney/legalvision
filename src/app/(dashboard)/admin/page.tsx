@@ -11,6 +11,7 @@ import { BudgetEditor } from "@/components/admin/BudgetEditor";
 import { InviteUserForm } from "@/components/admin/InviteUserForm";
 import { getSessionProfile } from "@/lib/auth/session";
 import { listAppUsers } from "@/lib/auth/users";
+import { currentPeriod } from "@/lib/data/period";
 
 const ROLE_TONE = { admin: "info", internal: "success", client: "purple", viewer: "grey" } as const;
 
@@ -19,6 +20,7 @@ export default async function AdminPage() {
   if (!me || me.role !== "admin") redirect("/overview");
 
   const budgetRows = await budgets();
+  const period = currentPeriod();
   const targetRows = targets();
   const userRows = await listAppUsers();
   const runs = syncRuns();
@@ -58,9 +60,10 @@ export default async function AdminPage() {
             panel: (
               <Card>
                 <CardTitle action={<span className="text-[12px] text-muted">Editable per account · feeds pacing live</span>}>
-                  Monthly budgets (July 2026)
+                  Monthly budgets ({period.label})
                 </CardTitle>
                 <BudgetEditor
+                  periodLabel={period.label}
                   rows={budgetRows.map((b) => {
                     const acct = AD_ACCOUNTS.find((a) => a.id === b.scopeId)!;
                     return {

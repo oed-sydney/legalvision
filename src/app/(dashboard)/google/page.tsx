@@ -12,6 +12,7 @@ import { ComboTrend } from "@/components/charts/ComboTrend";
 import { BarList } from "@/components/charts/BarList";
 import type { CampaignTotals } from "@/lib/data/warehouse";
 import { parseFilters, type FilterState } from "@/lib/filters/schema";
+import { hydrateLiveData } from "@/lib/data/source";
 import { buildReport } from "@/lib/data/report";
 import { computeTotals, queryCampaignDaily } from "@/lib/data/warehouse";
 import { searchTerms } from "@/lib/data/mock";
@@ -34,6 +35,7 @@ export default async function GooglePage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
+  await hydrateLiveData();
   const raw = parseFilters(await searchParams);
   const f: FilterState = { ...raw, channel: "google_ads" }; // this area is Google-only
   const report = buildReport(f);

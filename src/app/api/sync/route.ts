@@ -14,6 +14,9 @@ import { refreshTermsCache } from "@/lib/data/live-terms";
  * Meta live refresh runs through the Meta profile connection (system-user token) once
  * META_SYSTEM_USER_TOKEN is provided.
  */
+// The live Windsor pull can take ~30s; allow headroom on serverless.
+export const maxDuration = 60;
+
 export async function POST() {
   const now = new Date().toISOString();
   try {
