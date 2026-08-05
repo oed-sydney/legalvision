@@ -39,9 +39,13 @@ export const LATEST_COMPLETE_DAY = new Date(APP_NOW.getTime() - 86_400_000)
 export function nowDate(): Date {
   return new Date();
 }
-/** Latest complete day (yesterday, UTC), recomputed per call. */
-export function latestCompleteDay(): string {
-  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+/**
+ * Latest day the dashboard reports through = TODAY. Windsor now returns today's
+ * (partial) spend, so month-to-date matches the ad platform's live "this month".
+ * Recomputed per call.
+ */
+export function latestDataDay(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 const HISTORY_DAYS = 120;

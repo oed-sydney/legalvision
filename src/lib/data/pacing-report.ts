@@ -4,7 +4,7 @@ import type { CurrencyCode, MarketCode } from "../domain/types";
 import { computePacing, type PacingResult, type PacingStatus } from "../pacing/engine";
 import { convertAndSum, type Money } from "../currency/guard";
 import { fxTable } from "../currency/fx";
-import { nowDate, latestCompleteDay, dateRangeList } from "./mock";
+import { nowDate, latestDataDay, dateRangeList } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { campaignMetas } from "./source";
 import { queryCampaignDaily } from "./warehouse";
@@ -68,7 +68,7 @@ function trailing7(byDay: Map<string, number>, lcd: string): number {
 export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]> {
   const amounts = await budgetAmounts();
   const period = currentPeriod();
-  const lcd = latestCompleteDay();
+  const lcd = latestDataDay();
   const now = nowDate();
   const rows: PacingAccountRow[] = [];
   for (const acct of AD_ACCOUNTS) {
@@ -161,7 +161,7 @@ export function pacingOverall(markets: MarketRollup[]): OverallPacing {
 /** Per-campaign pacing using derived budgets (platform daily budget × days, labelled). */
 export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
   const period = currentPeriod();
-  const lcd = latestCompleteDay();
+  const lcd = latestDataDay();
   const now = nowDate();
   const daysInMonth = dateRangeList(period.start, period.end).length;
   const out: PacingCampaignRow[] = [];
@@ -213,7 +213,7 @@ export function pacingCurve(f: FilterState, overall: OverallPacing) {
       (f.channel === "all" || a.channel === f.channel)
   );
   const period = currentPeriod();
-  const lcd = latestCompleteDay();
+  const lcd = latestDataDay();
   const days = dateRangeList(period.start, period.end);
   const dComplete = days.filter((d) => d <= lcd).length;
   const dTotal = days.length;

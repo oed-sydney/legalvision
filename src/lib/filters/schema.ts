@@ -87,8 +87,10 @@ export function resolveRange(f: FilterState): ResolvedRange {
   const prevMonth = m === 1 ? 12 : m - 1;
   const prevQY = qStartMonth === 1 ? y - 1 : y;
   const prevQStartMonth = qStartMonth === 1 ? 10 : qStartMonth - 3;
-  // clamp MTD/QTD starts so from ≤ to even on day 1 of a period
-  const clampTo = (from: string) => (end >= from ? end : from);
+  // Period-to-date presets (MTD/QTD/YTD) run through TODAY to match the ad platforms'
+  // live "this month" view (which includes today's partial spend). Rolling "last N days"
+  // presets end at the latest complete day (yesterday), as the platforms do.
+  const clampTo = (from: string) => (TODAY >= from ? TODAY : from);
   switch (f.range) {
     case "today":
       return { from: TODAY, to: TODAY, label: "Today" };
@@ -109,7 +111,7 @@ export function resolveRange(f: FilterState): ResolvedRange {
     case "last_quarter":
       return { from: iso(prevQY, prevQStartMonth, 1), to: addDays(quarterStart, -1), label: "Last quarter" };
     case "ytd":
-      return { from: iso(y, 1, 1), to: end, label: "Year to date" };
+      return { from: iso(y, 1, 1), to: TODAY, label: "Year to date" };
     case "custom":
       return {
         from: f.from ?? addDays(end, -29),

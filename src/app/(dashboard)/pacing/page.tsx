@@ -55,7 +55,7 @@ export default async function PacingPage({
     <div>
       <PageHeader
         title="Budget Pacing"
-        subtitle={`Period: ${currentPeriod().label} (calendar month, account-local) · completed-days basis`}
+        subtitle={`Period: ${currentPeriod().label} (calendar month, account-local) · spend-to-date includes today`}
         actions={
           <a
             href="/admin"

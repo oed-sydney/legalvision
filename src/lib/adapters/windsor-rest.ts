@@ -110,19 +110,25 @@ export function fetchGoogleCampaigns(datePreset = "last_30d") {
   );
 }
 
-/** Pull per-campaign DAILY rows (true campaign × date grain — CPA varies by range). */
-export function fetchGoogleCampaignDaily(datePreset = "last_30d") {
+/**
+ * Pull per-campaign DAILY rows (true campaign × date grain — CPA varies by range).
+ * Pass an explicit date_from/date_to to include TODAY (Windsor's date presets like
+ * "last_90d" stop at yesterday; an explicit range returns today's partial too).
+ */
+export function fetchGoogleCampaignDaily(datePreset = "last_30d", dateFrom?: string, dateTo?: string) {
+  const window: Record<string, string> = dateFrom && dateTo ? { date_from: dateFrom, date_to: dateTo } : { date_preset: datePreset };
   return pull<{ account_name: string; campaign: string; date: string; spend: number; impressions: number; clicks: number; conversions: number }>(
     "account_name,campaign,date,spend,impressions,clicks,conversions",
-    { date_preset: datePreset, filter: JSON.stringify([["spend", "gt", 0]]) }
+    { ...window, filter: JSON.stringify([["spend", "gt", 0]]) }
   );
 }
 
 /** Pull per-campaign daily Live Leads (mapped conversion action). */
-export function fetchGoogleCampaignLiveLeadsDaily(datePreset = "last_30d") {
+export function fetchGoogleCampaignLiveLeadsDaily(datePreset = "last_30d", dateFrom?: string, dateTo?: string) {
+  const window: Record<string, string> = dateFrom && dateTo ? { date_from: dateFrom, date_to: dateTo } : { date_preset: datePreset };
   return pull<{ account_name: string; campaign: string; date: string; conversions: number }>(
     "account_name,campaign,date,conversions",
-    { date_preset: datePreset, filter: LL_FILTER }
+    { ...window, filter: LL_FILTER }
   );
 }
 

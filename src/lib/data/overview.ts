@@ -4,7 +4,7 @@ import type { CurrencyCode, MarketCode } from "../domain/types";
 import { computePacing, type PacingResult } from "../pacing/engine";
 import { fxTable } from "../currency/fx";
 import { convertAndSum, type Money } from "../currency/guard";
-import { nowDate, latestCompleteDay } from "./mock";
+import { nowDate, latestDataDay } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { computeTotals, queryCampaignDaily, type Totals } from "./warehouse";
 import { currentPeriod } from "./period";
@@ -79,7 +79,7 @@ export async function marketPacing(f: FilterState): Promise<{
 }> {
   const amounts = await budgetAmounts();
   const period = currentPeriod();
-  const lcd = latestCompleteDay();
+  const lcd = latestDataDay();
   const now = nowDate();
   const markets: MarketPacing[] = [];
   const budgetMoney: Money[] = [];

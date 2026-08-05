@@ -32,9 +32,13 @@ export interface LiveCache {
 }
 
 export async function syncGoogleLive(datePreset = "last_90d"): Promise<{ rows: number; days: number }> {
+  // Explicit range ending TODAY so the pull includes today's (partial) spend —
+  // Windsor's presets stop at yesterday, which made the dashboard lag the platform.
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
   const [campDaily, campLLDaily] = await Promise.all([
-    fetchGoogleCampaignDaily(datePreset),
-    fetchGoogleCampaignLiveLeadsDaily(datePreset),
+    fetchGoogleCampaignDaily(datePreset, from, to),
+    fetchGoogleCampaignLiveLeadsDaily(datePreset, from, to),
   ]);
 
   // Live Leads per (account, campaign, date) — joined onto the daily performance rows.
