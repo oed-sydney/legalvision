@@ -76,7 +76,7 @@ export default async function PacingPage({
             key: "summary",
             label: "Summary",
             panel: (
-              <SummaryPanel markets={markets} overall={overall} curve={curve} />
+              <SummaryPanel markets={markets} accounts={accounts} overall={overall} curve={curve} />
             ),
           },
           {
@@ -115,10 +115,12 @@ export default async function PacingPage({
 
 function SummaryPanel({
   markets,
+  accounts,
   overall,
   curve,
 }: {
   markets: ReturnType<typeof pacingMarkets>;
+  accounts: Awaited<ReturnType<typeof pacingAccounts>>;
   overall: ReturnType<typeof pacingOverall>;
   curve: ReturnType<typeof pacingCurve>;
 }) {
@@ -168,11 +170,40 @@ function SummaryPanel({
                 <div className="absolute top-0 h-full w-[2px] bg-ink/60" style={{ left: `${Math.min(m.pacing.periodElapsedPct * 100, 100)}%` }} />
               </div>
               <dl className="grid grid-cols-2 gap-y-1.5 text-[12px]">
-                <Row k="Budget" v={`${sym}${Math.round(m.budget).toLocaleString("en-AU")}`} />
+                <Row k="Market budget" v={`${sym}${Math.round(m.budget).toLocaleString("en-AU")}`} />
                 <Row k="Spend" v={`${sym}${Math.round(m.spend).toLocaleString("en-AU")}`} />
                 <Row k="Expected" v={m.pacing.expectedSpend != null ? `${sym}${Math.round(m.pacing.expectedSpend).toLocaleString("en-AU")}` : "—"} />
                 <Row k="Required/day" v={m.pacing.requiredDailySpend != null ? `${sym}${Math.round(m.pacing.requiredDailySpend).toLocaleString("en-AU")}` : "—"} />
               </dl>
+              {/* Per-channel split — each budget maps 1:1 to what's set in the editor. */}
+              <div className="mt-3 border-t border-[var(--lv-border)] pt-2.5">
+                <div className="mb-1 grid grid-cols-[1fr_auto_auto] gap-x-4 text-[10px] font-medium uppercase tracking-[0.04em] text-muted">
+                  <span>Channel</span>
+                  <span className="text-right">Budget</span>
+                  <span className="text-right">Spend</span>
+                </div>
+                {accounts
+                  .filter((a) => a.market === m.market)
+                  .sort((a) => (a.channel === "google_ads" ? -1 : 1))
+                  .map((a) => (
+                    <div key={a.accountId} className="grid grid-cols-[1fr_auto_auto] gap-x-4 py-0.5 text-[12px]">
+                      <span className="flex items-center gap-1.5 text-secondary">
+                        <span
+                          className="inline-block h-2 w-2 rounded-full"
+                          style={{ background: a.channel === "google_ads" ? "var(--lv-google)" : "var(--lv-meta)" }}
+                        />
+                        {a.channel === "google_ads" ? "Google" : "Meta"}
+                      </span>
+                      <span className="text-right tnum text-ink">
+                        {a.pacing.budget ? `${sym}${Math.round(a.pacing.budget).toLocaleString("en-AU")}` : "—"}
+                      </span>
+                      <span className="text-right tnum text-ink">
+                        {sym}
+                        {Math.round(a.pacing.spend).toLocaleString("en-AU")}
+                      </span>
+                    </div>
+                  ))}
+              </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {Object.entries(statusCounts).map(([s, c]) => (
                   <span key={s} className="text-[11px] text-muted">
