@@ -4,9 +4,10 @@ import type { CurrencyCode, MarketCode } from "../domain/types";
 import { computePacing, type PacingResult } from "../pacing/engine";
 import { fxTable } from "../currency/fx";
 import { convertAndSum, type Money } from "../currency/guard";
-import { APP_NOW, LATEST_COMPLETE_DAY } from "./mock";
+import { nowDate, latestCompleteDay } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { computeTotals, queryCampaignDaily, type Totals } from "./warehouse";
+import { currentPeriod } from "./period";
 import type { FilterState } from "../filters/schema";
 
 /** Per-(market) and per-(channel) totals for Overview splits + comparison tables. */
@@ -77,6 +78,9 @@ export async function marketPacing(f: FilterState): Promise<{
   };
 }> {
   const amounts = await budgetAmounts();
+  const period = currentPeriod();
+  const lcd = latestCompleteDay();
+  const now = nowDate();
   const markets: MarketPacing[] = [];
   const budgetMoney: Money[] = [];
   const spendMoney: Money[] = [];
@@ -93,17 +97,17 @@ export async function marketPacing(f: FilterState): Promise<{
     for (const acct of accts) {
       const acctBudget = amounts[acct.id] ?? null;
       const rows = queryCampaignDaily({
-        from: "2026-07-01",
-        to: LATEST_COMPLETE_DAY,
+        from: period.start,
+        to: lcd,
         accountId: acct.id,
       });
       const acctSpend = rows.reduce((s, r) => s + r.spend, 0);
       const pac = computePacing({
-        periodStart: "2026-07-01",
-        periodEnd: "2026-07-31",
+        periodStart: period.start,
+        periodEnd: period.end,
         budget: acctBudget,
         spend: acctSpend,
-        now: APP_NOW,
+        now,
         timezone: acct.reportingTimezone,
       });
       budget += acctBudget ?? 0;
@@ -112,11 +116,11 @@ export async function marketPacing(f: FilterState): Promise<{
     }
     // market-level pacing recomputed on market totals (single currency — exact)
     const pac = computePacing({
-      periodStart: "2026-07-01",
-      periodEnd: "2026-07-31",
+      periodStart: period.start,
+      periodEnd: period.end,
       budget: budget || null,
       spend,
-      now: APP_NOW,
+      now,
       timezone: MARKETS.find((x) => x.code === m.code)!.displayTimezone,
     });
     markets.push({ market: m.code, currency: m.currency, budget, spend, pacing: pac });

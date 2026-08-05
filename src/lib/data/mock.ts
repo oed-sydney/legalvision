@@ -23,12 +23,27 @@ import type {
  * Real adapters replace this module's output without touching reporting code.
  */
 
-/** Real "now" — pacing/freshness math anchors here. */
+/**
+ * Static anchor used ONLY to synthesize the mock warehouse below (frozen is fine —
+ * mock rows are generated once at module load). The REAL reporting path must NOT use
+ * these frozen constants; it uses nowDate()/latestCompleteDay() so "today" advances
+ * on a long-running server or a warm serverless instance.
+ */
 export const APP_NOW = new Date();
 /** Latest complete synced day (yesterday) — platforms rarely have reliable "today" rows. */
 export const LATEST_COMPLETE_DAY = new Date(APP_NOW.getTime() - 86_400_000)
   .toISOString()
   .slice(0, 10);
+
+/** Current instant, recomputed per call (real reporting path). */
+export function nowDate(): Date {
+  return new Date();
+}
+/** Latest complete day (yesterday, UTC), recomputed per call. */
+export function latestCompleteDay(): string {
+  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+}
+
 const HISTORY_DAYS = 120;
 
 // ---- date helpers -----------------------------------------------------------

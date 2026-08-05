@@ -63,8 +63,6 @@ function todayIso(): string {
   const d = new Date();
   return iso(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
-export const TODAY = todayIso();
-export const YESTERDAY = addDays(TODAY, -1);
 
 export interface ResolvedRange {
   from: string;
@@ -72,8 +70,14 @@ export interface ResolvedRange {
   label: string;
 }
 
-/** Resolve a preset to concrete dates, anchored to the real current date. */
+/**
+ * Resolve a preset to concrete dates, anchored to the real current date.
+ * "today"/"yesterday" are recomputed here on every call (never frozen at module load),
+ * so ranges stay correct on a long-running server or a warm serverless instance.
+ */
 export function resolveRange(f: FilterState): ResolvedRange {
+  const TODAY = todayIso();
+  const YESTERDAY = addDays(TODAY, -1);
   const end = YESTERDAY; // presets end at the latest complete day
   const [y, m] = TODAY.split("-").map(Number);
   const monthStart = iso(y, m, 1);

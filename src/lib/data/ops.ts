@@ -1,6 +1,5 @@
 import type { Alert, AppUser, SyncRun } from "../domain/types";
 import { AD_ACCOUNTS } from "../domain/accounts";
-import { APP_NOW } from "./mock";
 
 /** Seeded alerts across the rule templates (§21) — fire + auto-resolve on fixtures. */
 export function alerts(): Alert[] {
@@ -153,7 +152,7 @@ export function oldestFreshness(): { finishedAt: string; label: string } {
 }
 
 export function hoursSince(iso: string): number {
-  return (APP_NOW.getTime() - new Date(iso).getTime()) / 3_600_000;
+  return (Date.now() - new Date(iso).getTime()) / 3_600_000;
 }
 
 /** Seeded users (one admin + a few) for the Admin → Users view. */

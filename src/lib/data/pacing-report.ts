@@ -4,16 +4,15 @@ import type { CurrencyCode, MarketCode } from "../domain/types";
 import { computePacing, type PacingResult, type PacingStatus } from "../pacing/engine";
 import { convertAndSum, type Money } from "../currency/guard";
 import { fxTable } from "../currency/fx";
-import { APP_NOW, LATEST_COMPLETE_DAY, dateRangeList } from "./mock";
+import { nowDate, latestCompleteDay, dateRangeList } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { campaignMetas } from "./source";
 import { queryCampaignDaily } from "./warehouse";
 import { currentPeriod } from "./period";
 import type { FilterState } from "../filters/schema";
 
-// Active pacing window = current calendar month (auto-advances each month).
-const { start: PERIOD_START, end: PERIOD_END, label: PERIOD_LABEL } = currentPeriod(APP_NOW);
-export { PERIOD_LABEL };
+// Active pacing window = current calendar month; "today"/latest-complete-day are read
+// per call (never frozen at module load) so a long-running process stays current.
 
 export interface PacingAccountRow {
   accountId: string;
@@ -43,8 +42,12 @@ export interface MarketRollup {
   childStatuses: PacingStatus[];
 }
 
-function spendJuly(accountId: string): { total: number; byDay: Map<string, number> } {
-  const rows = queryCampaignDaily({ from: PERIOD_START, to: LATEST_COMPLETE_DAY, accountId });
+function periodSpend(
+  accountId: string,
+  periodStart: string,
+  lcd: string
+): { total: number; byDay: Map<string, number> } {
+  const rows = queryCampaignDaily({ from: periodStart, to: lcd, accountId });
   const byDay = new Map<string, number>();
   let total = 0;
   for (const r of rows) {
@@ -54,29 +57,32 @@ function spendJuly(accountId: string): { total: number; byDay: Map<string, numbe
   return { total, byDay };
 }
 
-function trailing7(byDay: Map<string, number>): number {
-  const start = new Date(`${LATEST_COMPLETE_DAY}T00:00:00Z`);
+function trailing7(byDay: Map<string, number>, lcd: string): number {
+  const start = new Date(`${lcd}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - 6);
-  const days = dateRangeList(start.toISOString().slice(0, 10), LATEST_COMPLETE_DAY);
+  const days = dateRangeList(start.toISOString().slice(0, 10), lcd);
   const vals = days.map((d) => byDay.get(d) ?? 0);
   return vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1);
 }
 
 export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]> {
   const amounts = await budgetAmounts();
+  const period = currentPeriod();
+  const lcd = latestCompleteDay();
+  const now = nowDate();
   const rows: PacingAccountRow[] = [];
   for (const acct of AD_ACCOUNTS) {
     if (f.country !== "all" && acct.market !== f.country) continue;
     if (f.channel !== "all" && acct.channel !== f.channel) continue;
-    const { total, byDay } = spendJuly(acct.id);
+    const { total, byDay } = periodSpend(acct.id, period.start, lcd);
     const pacing = computePacing({
-      periodStart: PERIOD_START,
-      periodEnd: PERIOD_END,
+      periodStart: period.start,
+      periodEnd: period.end,
       budget: amounts[acct.id] ?? null,
       spend: total,
-      now: APP_NOW,
+      now,
       timezone: acct.reportingTimezone,
-      trailingAvg7: trailing7(byDay),
+      trailingAvg7: trailing7(byDay, lcd),
     });
     rows.push({
       accountId: acct.id,
@@ -91,6 +97,8 @@ export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]
 }
 
 export function pacingMarkets(rows: PacingAccountRow[]): MarketRollup[] {
+  const period = currentPeriod();
+  const now = nowDate();
   const out: MarketRollup[] = [];
   for (const m of MARKETS) {
     const accts = rows.filter((r) => r.market === m.code);
@@ -98,11 +106,11 @@ export function pacingMarkets(rows: PacingAccountRow[]): MarketRollup[] {
     const budget = accts.reduce((s, r) => s + (r.pacing.budget ?? 0), 0);
     const spend = accts.reduce((s, r) => s + r.pacing.spend, 0);
     const pacing = computePacing({
-      periodStart: PERIOD_START,
-      periodEnd: PERIOD_END,
+      periodStart: period.start,
+      periodEnd: period.end,
       budget: budget || null,
       spend,
-      now: APP_NOW,
+      now,
       timezone: m.displayTimezone,
     });
     out.push({
@@ -152,6 +160,10 @@ export function pacingOverall(markets: MarketRollup[]): OverallPacing {
 
 /** Per-campaign pacing using derived budgets (platform daily budget × days, labelled). */
 export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
+  const period = currentPeriod();
+  const lcd = latestCompleteDay();
+  const now = nowDate();
+  const daysInMonth = dateRangeList(period.start, period.end).length;
   const out: PacingCampaignRow[] = [];
   for (const cm of campaignMetas()) {
     const acct = cm.account;
@@ -159,8 +171,8 @@ export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
     if (f.channel !== "all" && acct.channel !== f.channel) continue;
     if (f.account !== "all" && acct.id !== f.account) continue;
     const rows = queryCampaignDaily({
-      from: PERIOD_START,
-      to: LATEST_COMPLETE_DAY,
+      from: period.start,
+      to: lcd,
       accountId: acct.id,
       campaignId: cm.id,
     });
@@ -169,16 +181,16 @@ export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
     const byDay = new Map<string, number>();
     for (const r of rows) byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.spend);
     // derived budget: trailing daily run-rate × total days in period
-    const dailyBudget = trailing7(byDay) * 1.15;
-    const derivedBudget = Math.round((dailyBudget * 31) / 50) * 50;
+    const dailyBudget = trailing7(byDay, lcd) * 1.15;
+    const derivedBudget = Math.round((dailyBudget * daysInMonth) / 50) * 50;
     const pacing = computePacing({
-      periodStart: PERIOD_START,
-      periodEnd: PERIOD_END,
+      periodStart: period.start,
+      periodEnd: period.end,
       budget: derivedBudget || null,
       spend,
-      now: APP_NOW,
+      now,
       timezone: acct.reportingTimezone,
-      trailingAvg7: trailing7(byDay),
+      trailingAvg7: trailing7(byDay, lcd),
     });
     out.push({
       campaignId: cm.id,
@@ -200,14 +212,16 @@ export function pacingCurve(f: FilterState, overall: OverallPacing) {
       (f.country === "all" || a.market === f.country) &&
       (f.channel === "all" || a.channel === f.channel)
   );
-  const days = dateRangeList(PERIOD_START, PERIOD_END);
-  const dComplete = days.filter((d) => d <= LATEST_COMPLETE_DAY).length;
+  const period = currentPeriod();
+  const lcd = latestCompleteDay();
+  const days = dateRangeList(period.start, period.end);
+  const dComplete = days.filter((d) => d <= lcd).length;
   const dTotal = days.length;
 
   // daily converted spend across scope
   const dailyTotals = new Map<string, number>();
   for (const acct of accts) {
-    const rows = queryCampaignDaily({ from: PERIOD_START, to: LATEST_COMPLETE_DAY, accountId: acct.id });
+    const rows = queryCampaignDaily({ from: period.start, to: lcd, accountId: acct.id });
     const rate = fxTable(acct.currency, REPORTING_CURRENCY).rate;
     for (const r of rows) {
       dailyTotals.set(r.date, (dailyTotals.get(r.date) ?? 0) + r.spend * rate);
