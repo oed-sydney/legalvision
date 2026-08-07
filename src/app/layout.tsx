@@ -11,6 +11,8 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "LegalVision · Paid Media Reporting",
   description: "Client-facing paid media reporting dashboard — AU · UK · NZ.",
+  // Private client dashboard — keep it out of every search index.
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
