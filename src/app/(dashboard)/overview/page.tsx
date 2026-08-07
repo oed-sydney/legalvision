@@ -7,7 +7,6 @@ import { parseFilters } from "@/lib/filters/schema";
 import { buildReport } from "@/lib/data/report";
 import { marketPacing, marketTotals } from "@/lib/data/overview";
 import { hydrateLiveData } from "@/lib/data/source";
-import { alerts } from "@/lib/data/ops";
 import { marketName } from "@/lib/domain/accounts";
 import {
   CURRENCY_SYMBOL,
@@ -39,10 +38,18 @@ export default async function OverviewPage({
 
   const topCampaigns: CampaignRow[] = report.campaigns.slice(0, 10).map(toRow);
 
-  const openAlerts = alerts()
-    .filter((a) => a.status === "open")
-    .sort((a, b) => sev(b.severity) - sev(a.severity))
-    .slice(0, 5);
+  // "Needs attention" derived from LIVE pacing (real), not mock alerts.
+  const attention = pacing.markets
+    .filter((m) => m.pacing.status !== "on_track" && m.pacing.status !== "not_started")
+    .map((m) => ({
+      market: m.market,
+      currency: m.currency,
+      status: m.pacing.status,
+      variancePct: m.pacing.pacingVariancePct,
+      projected: m.pacing.projectedSpend,
+      budget: m.budget,
+    }))
+    .sort((a, b) => Math.abs(b.variancePct ?? 0) - Math.abs(a.variancePct ?? 0));
 
   return (
     <div>
@@ -160,21 +167,31 @@ export default async function OverviewPage({
           <CampaignsTable rows={topCampaigns} variant="overview" csvName="overview_top_campaigns" />
         </Card>
         <Card>
-          <CardTitle action={<span className="text-[12px] text-muted">{openAlerts.length} open</span>}>
+          <CardTitle action={<span className="text-[12px] text-muted">{attention.length} to review</span>}>
             Needs attention
           </CardTitle>
           <ul className="space-y-3">
-            {openAlerts.map((a) => (
-              <li key={a.id} className="flex gap-2.5">
+            {attention.length === 0 && (
+              <li className="text-[13px] text-muted">All markets on track for the month.</li>
+            )}
+            {attention.map((a) => (
+              <li key={a.market} className="flex gap-2.5">
                 <span
                   className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: a.severity === "critical" ? "#B91C1C" : a.severity === "warning" ? "#B45309" : "#1D4ED8" }}
+                  style={{ background: a.status === "at_risk" || a.status === "over_budget" ? "#B91C1C" : "#B45309" }}
                 />
                 <div className="min-w-0">
-                  <div className="truncate text-[13px] font-medium text-ink">{a.entityName}</div>
-                  <div className="text-[12px] text-secondary">{a.reason}</div>
+                  <div className="truncate text-[13px] font-medium text-ink">{marketName(a.market)}</div>
+                  <div className="text-[12px] text-secondary">
+                    {a.variancePct != null
+                      ? `${a.variancePct < 0 ? "" : "+"}${Math.round(a.variancePct * 100)}% vs expected pace`
+                      : "Off pace"}
+                    {a.projected != null
+                      ? ` · projected ${formatMoney(a.projected, a.currency)} of ${formatMoney(a.budget, a.currency)}`
+                      : ""}
+                  </div>
                   <div className="mt-0.5 text-[11px] uppercase tracking-wide text-muted">
-                    {a.market} · {a.channel === "google_ads" ? "Google" : "Meta"}
+                    {a.market} · budget pacing
                   </div>
                 </div>
               </li>
@@ -184,10 +201,6 @@ export default async function OverviewPage({
       </div>
     </div>
   );
-}
-
-function sev(s: string) {
-  return s === "critical" ? 3 : s === "warning" ? 2 : 1;
 }
 
 function toRow(c: {
