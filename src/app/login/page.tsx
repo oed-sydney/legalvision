@@ -17,23 +17,29 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) {
-      setError(
-        error.message === "Invalid login credentials"
-          ? "Incorrect email or password."
-          : error.message
-      );
+    try {
+      const supabase = createSupabaseBrowser();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setError(
+          error.message === "Invalid login credentials"
+            ? "Incorrect email or password."
+            : error.message
+        );
+        setLoading(false);
+        return;
+      }
+      const next = params.get("next");
+      router.replace(next && next.startsWith("/") ? next : "/overview");
+      router.refresh();
+    } catch {
+      // Network/extension errors surface here — show a clean message, never a raw "Type error".
+      setError("Couldn't reach the sign-in service. Check your connection (or an ad/privacy blocker) and try again.");
       setLoading(false);
-      return;
     }
-    const next = params.get("next");
-    router.replace(next && next.startsWith("/") ? next : "/overview");
-    router.refresh();
   }
 
   return (
@@ -112,7 +118,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-[var(--lv-muted)]">
-          Access is invite-only. Contact your account manager for an invite.
+          Access is invite-only. Contact your project lead for an invite.
         </p>
       </div>
     </main>
