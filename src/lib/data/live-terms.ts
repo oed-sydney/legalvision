@@ -5,12 +5,18 @@ import type { Keyword, SearchTerm, ComponentRating, CurrencyCode, MarketCode } f
 import { ACCOUNT_BY_ID } from "../domain/accounts";
 import { NAME_TO_ACCT } from "./real/build";
 import {
-  windsorConfigured,
   fetchGoogleSearchTerms,
   fetchGoogleSearchTermLiveLeads,
   fetchGoogleKeywordsQs,
   fetchGoogleKeywordLiveLeads,
 } from "../adapters/windsor-rest";
+import { kvGet, kvSet } from "./kv";
+
+// Keep the Postgres copy lean (serverless reads it per instance): all keywords are
+// needed for Quality Score, but only the highest-spend search terms are actionable
+// (display caps at 500; negatives target high-spend/no-conversion terms).
+const KV_KEY = "terms-cache";
+const KV_TERM_CAP = 3000;
 
 /**
  * Real search-term and keyword-quality data (last 30 days) pulled from Windsor
@@ -19,7 +25,6 @@ import {
  */
 
 const CACHE_PATH = path.join(process.cwd(), "data", "terms-cache.json");
-const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 export interface TermsCache {
   builtAt: string;
@@ -132,8 +137,20 @@ export async function refreshTermsCache(): Promise<{ searchTerms: number; keywor
     searchTerms,
     keywords,
   };
-  fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), "utf8");
+
+  // Durable, serverless-safe copy in Postgres (trimmed): all keywords + top search
+  // terms by spend. This is what production reads (the full fs cache below is dev-only).
+  const topTerms = [...searchTerms].sort((a, b) => b.spend - a.spend).slice(0, KV_TERM_CAP);
+  await kvSet(KV_KEY, { builtAt: cache.builtAt, rangeDays: 30, searchTerms: topTerms, keywords });
+  _kvMemo = null; // invalidate the in-process KV memo so the next read sees fresh data
+
+  // Full local filesystem cache (fast path for dev); ignore on read-only hosts.
+  try {
+    fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), "utf8");
+  } catch {
+    // read-only filesystem (e.g. Vercel) — the Postgres copy above is the source of truth
+  }
   return { searchTerms: searchTerms.length, keywords: keywords.length };
 }
 
@@ -152,18 +169,23 @@ function readCache(): TermsCache | null {
   }
 }
 
-/** Cached real rows; lazily refreshes when stale and Windsor is configured. */
+// Postgres copy, memoised per instance (it's ~2MB — don't refetch every request).
+let _kvMemo: { at: number; value: TermsCache | null } | null = null;
+const KV_TTL_MS = 5 * 60 * 1000;
+async function readKvTerms(): Promise<TermsCache | null> {
+  if (_kvMemo && Date.now() - _kvMemo.at < KV_TTL_MS) return _kvMemo.value;
+  const value = await kvGet<TermsCache | null>(KV_KEY, null);
+  _kvMemo = { at: Date.now(), value };
+  return value;
+}
+
+/**
+ * Real search-term + keyword-QS rows for the Google area. Reads the local filesystem
+ * cache in dev, else the Postgres copy (serverless). Never triggers a Windsor pull on
+ * render — refreshes happen via POST /api/sync (the Refresh button / scheduled job).
+ */
 export async function termsCache(): Promise<TermsCache | null> {
-  const cache = readCache();
-  const fresh = cache && Date.now() - Date.parse(cache.builtAt) < MAX_AGE_MS;
-  if (fresh) return cache;
-  if (windsorConfigured()) {
-    try {
-      await refreshTermsCache();
-      return readCache();
-    } catch {
-      return cache; // stale beats nothing
-    }
-  }
-  return cache;
+  const fsCache = readCache();
+  if (fsCache) return fsCache;
+  return readKvTerms();
 }
