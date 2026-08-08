@@ -10,6 +10,7 @@ import {
   Megaphone,
   Target,
   ClipboardList,
+  BadgeCheck,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const NAV = [
   { href: "/overview", label: "Executive Overview", icon: LayoutDashboard },
   { href: "/pacing", label: "Budget Pacing", icon: Gauge },
   { href: "/google", label: "Google Ads", icon: SearchIcon },
+  { href: "/quality", label: "Quality Score", icon: BadgeCheck },
   { href: "/meta", label: "Meta Ads", icon: Megaphone },
   { href: "/leads", label: "Lead Quality", icon: Target },
   { href: "/plan", label: "90-Day Plan", icon: ClipboardList },

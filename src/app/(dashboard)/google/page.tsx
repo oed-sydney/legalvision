@@ -6,7 +6,6 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsTable";
 import { KeywordsTable, type KeywordRow } from "@/components/tables/KeywordsTable";
 import { SearchTermsTable, type SearchTermRow } from "@/components/tables/SearchTermsTable";
-import { QualityScorePanel } from "@/components/panels/QualityScorePanel";
 import { ComboTrend } from "@/components/charts/ComboTrend";
 import { BarList } from "@/components/charts/BarList";
 import type { CampaignTotals } from "@/lib/data/warehouse";
@@ -16,14 +15,13 @@ import { buildReport } from "@/lib/data/report";
 import { computeTotals, queryCampaignDaily } from "@/lib/data/warehouse";
 import { searchTerms } from "@/lib/data/mock";
 import { realConversionActions as conversionActions } from "@/lib/data/conversion-actions";
-import { scopedKeywords, qsSummary, qsHighSpendLow, qsNoScoreWithSpend } from "@/lib/data/quality";
+import { scopedKeywords, qsSummary } from "@/lib/data/quality";
 import { termsCache } from "@/lib/data/live-terms";
 import { scoreSearchTerms, scoreKeywords } from "@/lib/insights/term-score";
 import { buildNegatives } from "@/lib/insights/negatives";
 import { NegativesPanel } from "@/components/panels/NegativesPanel";
 import { readNegativesApprovals } from "@/lib/data/negatives-store";
 import { TermScorePanel } from "@/components/panels/TermScorePanel";
-import { QsInsights } from "@/components/panels/QsInsights";
 import { TcpaPanel, buildTcpaRows } from "@/components/panels/TcpaPanel";
 import { tcpaTargets } from "@/lib/data/real/tcpa";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
@@ -312,25 +310,6 @@ export default async function GooglePage({
               </Card>
             ),
           },
-          {
-            key: "qs",
-            label: "Quality Score",
-            panel: (
-              <div className="space-y-6">
-                <QualityScorePanel
-                  summary={qs}
-                  highSpendLow={qsHighSpendLow(kws).slice(0, 10).map(kwLite)}
-                  noScore={qsNoScoreWithSpend(kws).slice(0, 10).map(kwLite)}
-                />
-                {usingLive && (
-                  <QsInsights
-                    kws={kws}
-                    planTarget={f.country === "NZ" || f.account === "nz-google" ? { count: 82, label: "90-day plan target" } : undefined}
-                  />
-                )}
-              </div>
-            ),
-          },
         ]}
       />
     </div>
@@ -343,24 +322,6 @@ function spendByType(campaigns: CampaignTotals[]): { type: string; spend: number
   return Array.from(map.entries())
     .map(([type, spend]) => ({ type, spend }))
     .sort((a, b) => b.spend - a.spend);
-}
-
-function kwLite(k: import("@/lib/domain/types").Keyword) {
-  return {
-    id: k.id,
-    text: k.text,
-    campaignName: k.campaignName,
-    adGroupName: k.adGroupName,
-    qualityScore: k.qualityScore,
-    qs30dAgo: k.qs30dAgo,
-    spend: k.spend,
-    impressions: k.impressions,
-    liveLeads: k.liveLeads,
-    currency: k.currency,
-    expectedCtr: k.expectedCtr,
-    adRelevance: k.adRelevance,
-    lpExperience: k.lpExperience,
-  };
 }
 
 export const dynamic = "force-dynamic";

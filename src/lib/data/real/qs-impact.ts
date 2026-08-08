@@ -185,11 +185,18 @@ export interface QsImpact {
   windowDays: 90;
 }
 
-export function qsImpact(): QsImpact {
+/** Market-aware: pass "AU" | "UK" | "NZ" to scope the change log + movements. */
+export function qsImpact(market: string = "all"): QsImpact {
+  const actionItems =
+    market === "all"
+      ? QS_ACTION_ITEMS
+      : QS_ACTION_ITEMS.filter((a) => a.market === market || a.market === "Global");
+  const movements =
+    market === "all" ? QS_KEYWORD_MOVEMENTS : QS_KEYWORD_MOVEMENTS.filter((m) => m.market === market);
   return {
-    actionItems: QS_ACTION_ITEMS,
-    movements: QS_KEYWORD_MOVEMENTS,
-    components: componentMovements(),
+    actionItems,
+    movements,
+    components: componentMovements(movements),
     baseline: QS_BASELINE,
     windowDays: 90,
   };
