@@ -23,12 +23,10 @@ interface KwLite {
 
 export function QualityScorePanel({
   summary,
-  decliners,
   highSpendLow,
   noScore,
 }: {
   summary: QsSummary;
-  decliners: KwLite[];
   highSpendLow: KwLite[];
   noScore: KwLite[];
 }) {
@@ -40,10 +38,6 @@ export function QualityScorePanel({
 
   return (
     <div className="space-y-6">
-      <p className="rounded-lg border border-[var(--lv-border)] bg-canvas px-4 py-2.5 text-[12px] text-secondary">
-        Every figure here is <strong>derived from keyword-level data</strong> and impression-weighted — there is no fabricated account-level Quality Score. Coverage % shows the share of Search impressions from QS-bearing keywords.
-      </p>
-
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
         <StatCard label={<MetricLabel metricKey="weighted_qs" />} value={summary.weightedQs?.toFixed(1) ?? "—"} sub={delta === null ? undefined : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} vs 30d`} subTone={delta === null ? undefined : delta >= 0 ? "text-success" : "text-danger"} />
@@ -83,8 +77,7 @@ export function QualityScorePanel({
       </p>
 
       {/* Action lists */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ActionList title="Declining QS (≥1 pt)" rows={decliners} kind="decliner" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ActionList title="High-spend, low QS (≤5)" rows={highSpendLow} kind="lowqs" />
         <ActionList title="No QS with spend" rows={noScore} kind="noqs" />
       </div>

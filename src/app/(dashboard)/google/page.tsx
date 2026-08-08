@@ -7,7 +7,6 @@ import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsT
 import { KeywordsTable, type KeywordRow } from "@/components/tables/KeywordsTable";
 import { SearchTermsTable, type SearchTermRow } from "@/components/tables/SearchTermsTable";
 import { QualityScorePanel } from "@/components/panels/QualityScorePanel";
-import { QsImpactSection } from "@/components/panels/QsImpactSection";
 import { ComboTrend } from "@/components/charts/ComboTrend";
 import { BarList } from "@/components/charts/BarList";
 import type { CampaignTotals } from "@/lib/data/warehouse";
@@ -17,8 +16,7 @@ import { buildReport } from "@/lib/data/report";
 import { computeTotals, queryCampaignDaily } from "@/lib/data/warehouse";
 import { searchTerms } from "@/lib/data/mock";
 import { realConversionActions as conversionActions } from "@/lib/data/conversion-actions";
-import { scopedKeywords, qsSummary, qsDecliners, qsHighSpendLow, qsNoScoreWithSpend } from "@/lib/data/quality";
-import { qsImpact } from "@/lib/data/real/qs-impact";
+import { scopedKeywords, qsSummary, qsHighSpendLow, qsNoScoreWithSpend } from "@/lib/data/quality";
 import { termsCache } from "@/lib/data/live-terms";
 import { scoreSearchTerms, scoreKeywords } from "@/lib/insights/term-score";
 import { buildNegatives } from "@/lib/insights/negatives";
@@ -318,20 +316,18 @@ export default async function GooglePage({
             key: "qs",
             label: "Quality Score",
             panel: (
-              <div className="space-y-4">
-                <QsImpactSection impact={qsImpact()} />
+              <div className="space-y-6">
+                <QualityScorePanel
+                  summary={qs}
+                  highSpendLow={qsHighSpendLow(kws).slice(0, 10).map(kwLite)}
+                  noScore={qsNoScoreWithSpend(kws).slice(0, 10).map(kwLite)}
+                />
                 {usingLive && (
                   <QsInsights
                     kws={kws}
                     planTarget={f.country === "NZ" || f.account === "nz-google" ? { count: 82, label: "90-day plan target" } : undefined}
                   />
                 )}
-                <QualityScorePanel
-                  summary={qs}
-                  decliners={qsDecliners(kws).slice(0, 10).map(kwLite)}
-                  highSpendLow={qsHighSpendLow(kws).slice(0, 10).map(kwLite)}
-                  noScore={qsNoScoreWithSpend(kws).slice(0, 10).map(kwLite)}
-                />
               </div>
             ),
           },
