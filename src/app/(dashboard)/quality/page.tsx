@@ -33,6 +33,14 @@ export default async function QualityScorePage({
   const kws = usingLive ? liveKws : scopedKeywords(f);
   const qs = qsSummary(kws);
 
+  const MARKET_LABEL: Record<string, string> = {
+    all: "All markets",
+    AU: "Australia",
+    UK: "United Kingdom",
+    NZ: "New Zealand",
+  };
+  const marketLabel = MARKET_LABEL[f.country] ?? "All markets";
+
   const keywordRows: KeywordRow[] = [...kws]
     .sort((a, b) => b.spend - a.spend)
     .slice(0, TABLE_ROW_CAP)
@@ -65,7 +73,13 @@ export default async function QualityScorePage({
           {
             key: "impact",
             label: "QS Impact",
-            panel: <QsImpactSection impact={qsImpact(f.country)} />,
+            panel: (
+              <QsImpactSection
+                impact={qsImpact(f.country)}
+                marketLabel={marketLabel}
+                currentWeightedQs={qs.weightedQs}
+              />
+            ),
           },
           {
             key: "scores",

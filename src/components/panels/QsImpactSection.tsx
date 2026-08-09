@@ -10,7 +10,15 @@ import type { QsImpact } from "@/lib/data/real/qs-impact";
  * Change log from ClickUp (LV - PPC); keyword + component movements from Windsor
  * current-vs-historical QS. Component movements surface even when the QS integer is flat.
  */
-export function QsImpactSection({ impact }: { impact: QsImpact }) {
+export function QsImpactSection({
+  impact,
+  marketLabel = "All markets",
+  currentWeightedQs = null,
+}: {
+  impact: QsImpact;
+  marketLabel?: string;
+  currentWeightedQs?: number | null;
+}) {
   const completed = impact.actionItems.filter((a) => a.status === "complete");
   const inProgress = impact.actionItems.filter((a) => a.status === "in_progress");
   const avgLift =
@@ -18,21 +26,28 @@ export function QsImpactSection({ impact }: { impact: QsImpact }) {
       ? impact.movements.reduce((s, m) => s + (m.qsAfter - m.qsBefore), 0) / impact.movements.length
       : 0;
   const componentUps = impact.components.reduce((s, c) => s + c.count, 0);
+  const noHistory = impact.movements.length === 0;
 
   return (
     <Card className="border-l-4 border-l-[var(--lv-accent)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[16px] font-semibold text-ink">Quality Score impact — last 90 days</h2>
+        <h2 className="text-[16px] font-semibold text-ink">Quality Score impact — {marketLabel}</h2>
         <span className="text-[12px] text-muted">Change log: ClickUp · QS movement: Google historical vs current</span>
       </div>
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat label="Audit baseline (AU)" value={impact.baseline.auAvg.toFixed(2)} sub={`${impact.baseline.auAtQs1to4} kw at QS 1–4`} />
+        <Stat label={`Current weighted QS · ${marketLabel}`} value={currentWeightedQs != null ? currentWeightedQs.toFixed(1) : "—"} sub="live · impression-weighted" />
         <Stat label="Action items completed" value={String(completed.length)} sub={`${inProgress.length} in progress`} />
-        <Stat label="Component ratings improved" value={String(componentUps)} sub="Exp CTR / Ad rel / LP" subTone="text-success" />
-        <Stat label="Avg QS lift" value={`+${avgLift.toFixed(1)}`} sub={`${impact.movements.length} keywords`} subTone="text-success" />
+        <Stat label="Component ratings improved" value={String(componentUps)} sub="Exp CTR / Ad rel / LP" subTone={componentUps > 0 ? "text-success" : undefined} />
+        <Stat label="Avg QS lift" value={impact.movements.length ? `+${avgLift.toFixed(1)}` : "—"} sub={`${impact.movements.length} keywords`} subTone={impact.movements.length ? "text-success" : undefined} />
       </div>
+
+      {noHistory && (
+        <p className="mt-4 rounded-lg border border-[var(--lv-border)] bg-canvas px-4 py-2.5 text-[12px] text-secondary">
+          No QS remediation movements have been logged for <strong>{marketLabel}</strong> in this window — the improvement history below reflects the AU remediation programme. Switch the market to <strong>Australia</strong> or <strong>All markets</strong> to see keyword-level movements, or use the <strong>Scores &amp; distribution</strong> tab for {marketLabel}&apos;s live Quality Score breakdown.
+        </p>
+      )}
 
       {/* Component improvements — even where the QS integer didn't move */}
       <div className="mt-5">

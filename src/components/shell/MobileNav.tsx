@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { LayoutDashboard, Gauge, Search as SearchIcon, Megaphone, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Gauge, Search as SearchIcon, Megaphone, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/pacing", label: "Pacing", icon: Gauge },
   { href: "/google", label: "Google", icon: SearchIcon },
+  { href: "/quality", label: "Quality", icon: BadgeCheck },
   { href: "/meta", label: "Meta", icon: Megaphone },
-  { href: "/leads", label: "More", icon: MoreHorizontal },
 ];
 
 export function MobileNav() {

@@ -21,7 +21,7 @@ const NAV = [
   { href: "/google", label: "Google Ads", icon: SearchIcon },
   { href: "/quality", label: "Quality Score", icon: BadgeCheck },
   { href: "/meta", label: "Meta Ads", icon: Megaphone },
-  { href: "/leads", label: "Lead Quality", icon: Target },
+  // Lead Quality hidden for now (route still exists, just not linked).
   { href: "/plan", label: "90-Day Plan", icon: ClipboardList },
 ];
 
