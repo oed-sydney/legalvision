@@ -11,6 +11,7 @@ import {
   fetchGoogleKeywordLiveLeads,
 } from "../adapters/windsor-rest";
 import { kvGet, kvSet } from "./kv";
+import { captureQsSnapshot, keywordQsDaysAgo, stableKwKey } from "./qs-snapshot";
 
 // Keep the Postgres copy lean (serverless reads it per instance): all keywords are
 // needed for Quality Score, but only the highest-spend search terms are actionable
@@ -129,6 +130,21 @@ export async function refreshTermsCache(): Promise<{ searchTerms: number; keywor
       qs30dAgo: null, // no QS history in the 30d snapshot
       source: "windsor",
     });
+  }
+
+  // Fill qs30dAgo from the QS snapshot ~30 days ago (populates once history accrues),
+  // then capture today's snapshot so the history keeps building.
+  try {
+    const prior = await keywordQsDaysAgo(30);
+    if (Object.keys(prior).length) {
+      for (const k of keywords) {
+        const was = prior[stableKwKey(k)];
+        if (was != null) k.qs30dAgo = was;
+      }
+    }
+    await captureQsSnapshot(keywords);
+  } catch {
+    // snapshot is best-effort — never fail the refresh over history capture
   }
 
   const cache: TermsCache = {

@@ -30,3 +30,11 @@ export async function kvSet(key: string, value: unknown): Promise<void> {
     .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
   if (error) throw new Error(`kvSet(${key}) failed: ${error.message}`);
 }
+
+export async function kvDelete(key: string): Promise<void> {
+  try {
+    await createSupabaseAdmin().from("app_kv").delete().eq("key", key);
+  } catch {
+    // best-effort (used for pruning old QS snapshots)
+  }
+}
