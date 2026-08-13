@@ -5,6 +5,7 @@ import { windsorConfigured } from "@/lib/adapters/windsor-rest";
 import { syncGoogleLive } from "@/lib/data/live-sync";
 import { refreshPlanCache } from "@/lib/plan/metrics";
 import { refreshTermsCache } from "@/lib/data/live-terms";
+import { refreshBudgetLost } from "@/lib/data/budget-lost";
 
 /**
  * Refresh endpoint powering the top-bar "Refresh" button.
@@ -23,9 +24,12 @@ export async function POST() {
     if (windsorConfigured()) {
       const { rows, days } = await syncGoogleLive("last_90d"); // 90d → enables period comparisons
       await refreshPlanCache(); // 90-day-plan monthly KPIs (plan start → today)
-      // search-term/keyword-QS snapshot — best-effort, never fails the sync
+      // search-term/keyword-QS snapshot + per-campaign budget-lost — best-effort.
       try {
         await refreshTermsCache();
+      } catch {}
+      try {
+        await refreshBudgetLost();
       } catch {}
       await writeSyncState({
         lastSyncedAt: now,

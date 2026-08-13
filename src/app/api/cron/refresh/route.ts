@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { windsorConfigured } from "@/lib/adapters/windsor-rest";
 import { syncGoogleLive } from "@/lib/data/live-sync";
 import { refreshTermsCache } from "@/lib/data/live-terms";
+import { refreshBudgetLost } from "@/lib/data/budget-lost";
 import { refreshPlanCache } from "@/lib/plan/metrics";
 import { writeSyncState } from "@/lib/data/sync-state";
 
@@ -35,6 +36,9 @@ export async function GET(request: Request) {
     // Best-effort: keyword/QS + plan caches (terms refresh also captures the QS snapshot).
     try {
       await refreshTermsCache();
+    } catch {}
+    try {
+      await refreshBudgetLost();
     } catch {}
     try {
       await refreshPlanCache();

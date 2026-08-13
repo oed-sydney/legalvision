@@ -4,8 +4,15 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { ExportCsvButton, type CsvCell } from "@/components/ui/ExportCsvButton";
 import { formatInt, formatMoney } from "@/lib/metrics/format";
 import { BIDDING_CHANGE_DATE, type TcpaTarget } from "@/lib/data/real/tcpa";
+import { BUDGET_LIMITED_THRESHOLD, type BudgetLostMap } from "@/lib/data/budget-lost";
 import type { CampaignTotals } from "@/lib/data/warehouse";
 import type { CurrencyCode } from "@/lib/domain/types";
+
+/** Suggest a new (lower) target only for budget-limited campaigns whose CPA is >10% below target. */
+const SUGGEST_DELTA = -0.1;
+function shouldSuggest(r: { budgetLimited: boolean; deltaPct: number | null }): boolean {
+  return r.budgetLimited && r.deltaPct !== null && r.deltaPct < SUGGEST_DELTA;
+}
 
 /**
  * Target CPA review — actual CPA vs target for active campaigns on target-based bid
@@ -23,11 +30,14 @@ export interface TcpaRow {
   target: TcpaTarget;
   actualCpa: number | null; // null = 0 conversions in range
   deltaPct: number | null; // (actual − target) / target
+  budgetLostShare: number | null; // search budget-lost impression share (0..1), last 30d
+  budgetLimited: boolean; // budgetLostShare > threshold
 }
 
 export function buildTcpaRows(
   campaigns: CampaignTotals[],
-  targets: Map<string, TcpaTarget>
+  targets: Map<string, TcpaTarget>,
+  budgetLost: BudgetLostMap = {}
 ): { rows: TcpaRow[]; excludedActive: number } {
   const rows: TcpaRow[] = [];
   let excludedActive = 0;
@@ -39,15 +49,23 @@ export function buildTcpaRows(
       continue;
     }
     const actualCpa = c.conversions > 0 ? c.spend / c.conversions : null;
+    const share = budgetLost[`${c.market}|${c.campaignName}`] ?? null;
     rows.push({
       campaign: c,
       target: t,
       actualCpa,
       deltaPct: actualCpa === null ? null : (actualCpa - t.targetCpa) / t.targetCpa,
+      budgetLostShare: share,
+      budgetLimited: (share ?? 0) > BUDGET_LIMITED_THRESHOLD,
     });
   }
-  // Most-overperforming first (biggest gap below target), then over-target, then no-conv.
-  rows.sort((a, b) => (a.deltaPct ?? Number.MAX_VALUE) - (b.deltaPct ?? Number.MAX_VALUE));
+  // Suggestion candidates first (budget-limited & >10% under target), then by gap to target.
+  rows.sort((a, b) => {
+    const sa = shouldSuggest(a) ? 0 : 1;
+    const sb = shouldSuggest(b) ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return (a.deltaPct ?? Number.MAX_VALUE) - (b.deltaPct ?? Number.MAX_VALUE);
+  });
   return { rows, excludedActive };
 }
 
@@ -69,20 +87,21 @@ export function TcpaPanel({
   rangeFrom: string;
   rangeTo: string;
 }) {
-  const over = rows.filter((r) => r.deltaPct !== null && r.deltaPct < -0.05); // beating target by >5%
-  const near = rows.filter((r) => r.deltaPct !== null && Math.abs(r.deltaPct) <= 0.05);
+  const suggest = rows.filter(shouldSuggest); // budget-limited & >10% under target → suggest new target
+  const budgetLimited = rows.filter((r) => r.budgetLimited);
   const above = rows.filter((r) => r.deltaPct !== null && r.deltaPct > 0.05);
 
   // CSV export = exactly the on-screen rows (§25: plain numbers, currency column, no symbols).
   const csvHeaders = [
     "market", "campaign", "bid_strategy", "currency", "spend", "conversions",
-    "actual_cpa", "target_cpa", "vs_target_pct", "status", "suggested_target",
+    "actual_cpa", "target_cpa", "vs_target_pct", "budget_lost_pct", "budget_limited", "status", "suggested_target",
   ];
   const csvRows: CsvCell[][] = rows.map((r) => {
     const status =
       r.deltaPct === null ? "no_conversions"
-      : r.deltaPct < -0.05 ? "overperforming"
+      : shouldSuggest(r) ? "suggest_lower_target"
       : r.deltaPct > 0.05 ? "over_target"
+      : r.deltaPct < SUGGEST_DELTA ? "under_target_not_budget_limited"
       : "on_target";
     return [
       r.campaign.market,
@@ -94,10 +113,10 @@ export function TcpaPanel({
       r.actualCpa === null ? null : Math.round(r.actualCpa * 100) / 100,
       r.target.targetCpa,
       r.deltaPct === null ? null : Math.round(r.deltaPct * 1000) / 10,
+      r.budgetLostShare === null ? null : Math.round(r.budgetLostShare * 1000) / 10,
+      r.budgetLimited ? "yes" : "no",
       status,
-      r.deltaPct !== null && r.deltaPct < -0.05 && r.actualCpa !== null
-        ? Math.round(r.actualCpa / 5) * 5
-        : null,
+      shouldSuggest(r) && r.actualCpa !== null ? Math.round(r.actualCpa / 5) * 5 : null,
     ];
   });
 
@@ -108,17 +127,19 @@ export function TcpaPanel({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#B45309]" />
         <p className="text-[13px] leading-relaxed text-[#854D0E]">
           <strong>Google bidding update — {BIDDING_CHANGE_DATE}.</strong> Budget-limited campaigns on
-          target-based bidding will start delivering <em>at</em> their target instead of beating it. Any
-          campaign below its target CPA today is likely to drift up to the target unless the target is
-          lowered to match actual performance. Targets are not adjusted automatically.
+          target-based bidding will start delivering <em>at</em> their target instead of beating it. A new
+          target is suggested only where a campaign is <strong>limited by budget</strong> (losing &gt;
+          {Math.round(BUDGET_LIMITED_THRESHOLD * 100)}% of impressions to budget) <strong>and</strong> its
+          actual CPA is more than 10% below target — those are the ones set to drift up unless the target is
+          lowered to lock in current performance. Targets are not adjusted automatically.
         </p>
       </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat label="Active tCPA campaigns" value={String(rows.length)} sub={`${rangeLabel} · with spend`} />
-        <Stat label="Overperforming" value={String(over.length)} sub="actual CPA > 5% below target — tighten" subTone="text-success" />
-        <Stat label="Near target" value={String(near.length)} sub="within ±5%" />
+        <Stat label="Limited by budget" value={String(budgetLimited.length)} sub={`>${Math.round(BUDGET_LIMITED_THRESHOLD * 100)}% impr. lost to budget`} />
+        <Stat label="Suggest new target" value={String(suggest.length)} sub="budget-limited & >10% under target" subTone={suggest.length ? "text-success" : undefined} />
         <Stat label="Over target" value={String(above.length)} sub="actual CPA above target" subTone={above.length ? "text-danger" : undefined} />
       </div>
 
@@ -153,6 +174,7 @@ export function TcpaPanel({
                   <th className="px-3 py-2 text-right">Actual CPA</th>
                   <th className="px-3 py-2 text-right">Target CPA</th>
                   <th className="px-3 py-2 text-left">vs target</th>
+                  <th className="px-3 py-2 text-right">Budget lost</th>
                   <th className="px-3 py-2 text-left">Action</th>
                 </tr>
               </thead>
@@ -166,7 +188,7 @@ export function TcpaPanel({
         )}
         <p className="mt-3 text-[11px] text-muted">
           {excludedActive > 0 && `${excludedActive} active campaign${excludedActive === 1 ? "" : "s"} without a CPA target excluded (Max Conv/Value with no target, Manual CPC, Impression Share). `}
-          Suggested target ≈ current actual CPA — review before {BIDDING_CHANGE_DATE} so performance holds when Google aligns delivery to targets.
+          A new target (≈ current actual CPA) is suggested only for campaigns limited by budget (&gt;{Math.round(BUDGET_LIMITED_THRESHOLD * 100)}% impressions lost to budget) whose CPA is more than 10% below target — review before {BIDDING_CHANGE_DATE}. Budget-lost impression share is the last 30 days.
         </p>
       </Card>
     </div>
@@ -175,12 +197,13 @@ export function TcpaPanel({
 
 function TcpaTableRow({ r }: { r: TcpaRow }) {
   const cur = r.campaign.currency as CurrencyCode;
+  const suggest = shouldSuggest(r);
   const over = r.deltaPct !== null && r.deltaPct < -0.05;
   const aboveTarget = r.deltaPct !== null && r.deltaPct > 0.05;
   const ratio = r.actualCpa === null ? null : Math.min(r.actualCpa / r.target.targetCpa, 1.5);
 
   return (
-    <tr className={`border-b border-[var(--lv-border)] last:border-0 ${over ? "bg-[#F0FDF4]" : ""}`}>
+    <tr className={`border-b border-[var(--lv-border)] last:border-0 ${suggest ? "bg-[#F0FDF4]" : ""}`}>
       <td className="max-w-[240px] py-2.5 pr-3">
         <div className="truncate font-medium text-ink" title={r.campaign.campaignName}>{r.campaign.campaignName}</div>
         <div className="text-[11px] text-muted">{r.campaign.market}</div>
@@ -219,13 +242,24 @@ function TcpaTableRow({ r }: { r: TcpaRow }) {
           </div>
         )}
       </td>
+      <td className="px-3 py-2.5 text-right tnum">
+        {r.budgetLostShare === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          <span className={r.budgetLimited ? "font-semibold text-warning" : "text-secondary"}>
+            {Math.round(r.budgetLostShare * 100)}%
+          </span>
+        )}
+      </td>
       <td className="whitespace-nowrap px-3 py-2.5">
-        {over && r.actualCpa !== null ? (
+        {suggest && r.actualCpa !== null ? (
           <StatusPill tone="success" dot={false}>
             Lower target → ≈{formatMoney(Math.round(r.actualCpa / 5) * 5, cur)}
           </StatusPill>
         ) : aboveTarget ? (
           <StatusPill tone="danger" dot={false}>Over target — review</StatusPill>
+        ) : over && !r.budgetLimited ? (
+          <span className="text-[12px] text-muted">Under target · not budget-limited</span>
         ) : r.deltaPct === null ? (
           <span className="text-[12px] text-muted">—</span>
         ) : (

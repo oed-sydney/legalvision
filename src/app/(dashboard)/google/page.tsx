@@ -24,6 +24,7 @@ import { readNegativesApprovals } from "@/lib/data/negatives-store";
 import { TermScorePanel } from "@/components/panels/TermScorePanel";
 import { TcpaPanel, buildTcpaRows } from "@/components/panels/TcpaPanel";
 import { tcpaTargets } from "@/lib/data/real/tcpa";
+import { budgetLostMap } from "@/lib/data/budget-lost";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
 
 export default async function GooglePage({
@@ -49,6 +50,7 @@ export default async function GooglePage({
   // Real 30-day search terms + keyword QS from Windsor (cached); mock fallback
   // keeps the area working before the first pull.
   const live = await termsCache();
+  const budgetLost = await budgetLostMap();
   const liveKws = (live?.keywords ?? []).filter(
     (k) => (f.country === "all" || k.market === f.country) && (f.account === "all" || k.accountId === f.account)
   );
@@ -219,7 +221,7 @@ export default async function GooglePage({
             key: "tcpa",
             label: "Target CPA",
             panel: (() => {
-              const tcpa = buildTcpaRows(report.campaigns, tcpaTargets());
+              const tcpa = buildTcpaRows(report.campaigns, tcpaTargets(), budgetLost);
               return (
                 <TcpaPanel
                   rows={tcpa.rows}
