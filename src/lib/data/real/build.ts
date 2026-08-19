@@ -41,7 +41,11 @@ export interface GLLDaily { acct: AcctCode; date: string; liveLeads: number }
 export interface GCamp { acct: AcctCode; name: string; spend: number; impressions: number; clicks: number; conversions: number }
 export interface GCampLL { acct: AcctCode; name: string; liveLeads: number }
 export interface MAcct { acct: AcctCode; spend: number; impressions: number; clicks: number; linkClicks: number; lpv: number; leads: number }
-export interface MCamp { acct: AcctCode; name: string; objective: string }
+/** Real per-campaign Meta metrics (30d) — carries its own numbers, no account-total splitting. */
+export interface MCamp {
+  acct: AcctCode; id: string; name: string; objective: string;
+  spend: number; impressions: number; clicks: number; linkClicks: number; lpv: number; leads: number;
+}
 
 export interface AssembleInput {
   days: string[];
@@ -123,33 +127,31 @@ export function assembleCampaignDaily(input: AssembleInput): CampaignDaily[] {
   });
   const wsum = wshape.reduce((a, b) => a + b, 0) || 1;
 
-  for (const acct of input.metaAccounts) {
-    const camps = input.metaCampaigns.filter((c) => c.acct === acct.acct);
-    const weights = camps.map((_, i) => (i === 0 ? 0.5 : 0.5 / (camps.length - 1 || 1)));
-    camps.forEach((c, ci) => {
-      const w = weights[ci];
-      metaDays.forEach((date, di) => {
-        const df = wshape[di] / wsum;
-        rows.push({
-          date,
-          accountId: acct.acct,
-          campaignId: `${acct.acct}-${slug(c.name)}`,
-          campaignName: c.name,
-          campaignType: (c.objective as CampaignType) ?? "Leads",
-          market: MARKET[acct.acct],
-          channel: "meta_ads",
-          currency: CURRENCY[acct.acct],
-          spend: round2(acct.spend * w * df),
-          impressions: Math.round(acct.impressions * w * df),
-          clicks: Math.round(acct.clicks * w * df),
-          linkClicks: Math.round(acct.linkClicks * w * df),
-          landingPageViews: Math.round(acct.lpv * w * df),
-          conversions: 0,
-          conversionValue: 0,
-          leads: Math.round(acct.leads * w * df),
-          liveLeads: null,
-          source: "windsor",
-        });
+  // Each Meta campaign carries its OWN real 30d totals, distributed across the last-30
+  // days by the weekday shape. No account-total splitting → every campaign has its own
+  // distinct numbers (the previous fake-weight approach made non-first campaigns identical).
+  for (const c of input.metaCampaigns) {
+    metaDays.forEach((date, di) => {
+      const df = wshape[di] / wsum;
+      rows.push({
+        date,
+        accountId: c.acct,
+        campaignId: `${c.acct}-${slug(c.name)}`,
+        campaignName: c.name,
+        campaignType: (c.objective as CampaignType) ?? "Leads",
+        market: MARKET[c.acct],
+        channel: "meta_ads",
+        currency: CURRENCY[c.acct],
+        spend: round2(c.spend * df),
+        impressions: Math.round(c.impressions * df),
+        clicks: Math.round(c.clicks * df),
+        linkClicks: Math.round(c.linkClicks * df),
+        landingPageViews: Math.round(c.lpv * df),
+        conversions: 0,
+        conversionValue: 0,
+        leads: Math.round(c.leads * df),
+        liveLeads: null,
+        source: "windsor",
       });
     });
   }
@@ -160,10 +162,16 @@ export function assembleCampaignDaily(input: AssembleInput): CampaignDaily[] {
 /** Meta inputs from the baked snapshot (Meta live needs a token; snapshot used meanwhile). */
 export function metaSnapshotInputs(): { metaAccounts: MAcct[]; metaCampaigns: MCamp[] } {
   return {
-    metaAccounts: META_ACCOUNTS.map((r) => ({
-      acct: r[0], spend: r[1], impressions: r[2], clicks: r[5], linkClicks: r[6], lpv: r[7], leads: r[8],
+    metaAccounts: META_ACCOUNTS.map((a) => ({
+      acct: a.acct, spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+      linkClicks: a.linkClicks, lpv: a.lpv, leads: a.smeLeads + a.bofuTrials,
     })),
-    metaCampaigns: META_CAMPAIGNS.map((r) => ({ acct: r[0], name: r[1], objective: r[2] })),
+    // Per-campaign "leads" = its primary result (SME form leads OR BOFU trial conversions).
+    metaCampaigns: META_CAMPAIGNS.map((c) => ({
+      acct: c.acct, id: c.id, name: c.name, objective: c.objective,
+      spend: c.spend, impressions: c.impressions, clicks: c.clicks,
+      linkClicks: c.linkClicks, lpv: c.lpv, leads: c.leads + c.trials,
+    })),
   };
 }
 

@@ -9,6 +9,8 @@
  * Meta live leads remain "—" (pending CRM lead-source join, A2). Meta NZ is access-gated (A11).
  */
 
+import type { CampaignType } from "../../domain/types";
+
 export const SNAPSHOT_FROM = "2026-06-14";
 export const SNAPSHOT_TO = "2026-07-13";
 export const SNAPSHOT_PULLED_AT = "2026-07-14T02:30:00Z";
@@ -209,17 +211,117 @@ export const GOOGLE_CAMPAIGN_LIVE_LEADS: [AcctCode, string, number][] = [
   ["nz-google", "NZ - Demand Gen", 2], ["nz-google", "NZ-SC - Employment", 1],
 ];
 
-// Meta account 30d totals: [acct, spend, impressions, reach, frequency, clicks, linkClicks, lpv, leads]
-export const META_ACCOUNTS: [AcctCode, number, number, number, number, number, number, number, number][] = [
-  ["au-meta", 4750.47, 202508, 83286, 2.43, 7864, 6046, 4155, 98],
-  ["uk-meta", 1531.55, 72206, 27354, 2.64, 3254, 2218, 1200, 36],
+/**
+ * REAL Meta Ads data — pulled 2026-08-18 via the Meta Marketing API (LegalVision AU
+ * `act_572916339475556`, LegalVision UK `act_3250766361819452`), window `last_30d`.
+ * NZ Meta (`act_175621377645284`) is not yet enabled for API access (Meta rollout), so
+ * it stays absent — matching the account picker.
+ *
+ * The two lead types are DISTINCT Meta results and must never be blended:
+ *  - SME Publication → Meta lead-form submissions   (`actions:leadgen.other`, the `lead` field)
+ *  - BOFU            → "30 Day Trial" custom conversion (`offsite_conversion.custom.*`)
+ * They come from different result fields, so the app reports them as separate tiles.
+ */
+
+export type MetaFunnel = "BOFU" | "SME Publication" | "Traffic";
+export type MetaMarket = "AU" | "UK";
+export type MetaCurrency = "AUD" | "GBP";
+
+export interface MetaAccountSnap {
+  acct: AcctCode;
+  market: MetaMarket;
+  currency: MetaCurrency;
+  spend: number;
+  impressions: number;
+  reach: number; // deduplicated, account-level (non-additive across days)
+  frequency: number;
+  clicks: number;
+  ctr: number; // %
+  cpc: number;
+  cpm: number;
+  linkClicks: number; // outbound clicks
+  lpv: number;
+  smeLeads: number; // Meta lead-form submissions
+  smeSpend: number; // spend on the SME Publication campaign
+  bofuTrials: number; // "30 Day Trial" custom conversions
+  bofuSpend: number; // spend on the BOFU-Conversions campaign
+}
+
+export interface MetaCampaignSnap {
+  acct: AcctCode;
+  market: MetaMarket;
+  currency: MetaCurrency;
+  id: string;
+  name: string;
+  funnel: MetaFunnel;
+  objective: CampaignType; // Meta objective mapped to our union
+  spend: number;
+  impressions: number;
+  reach: number;
+  frequency: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  linkClicks: number;
+  lpv: number;
+  leads: number; // SME lead-form submissions (0 for non-SME)
+  leadCpl: number | null;
+  trials: number; // BOFU trial conversions (0 for non-BOFU)
+  trialCpl: number | null;
+}
+
+export const META_ACCOUNTS: MetaAccountSnap[] = [
+  {
+    acct: "au-meta", market: "AU", currency: "AUD",
+    spend: 4383.95, impressions: 206901, reach: 84952, frequency: 2.44,
+    clicks: 6643, ctr: 3.21, cpc: 0.66, cpm: 21.19, linkClicks: 4369, lpv: 3738,
+    smeLeads: 77, smeSpend: 1324.27, bofuTrials: 43, bofuSpend: 1865.2,
+  },
+  {
+    acct: "uk-meta", market: "UK", currency: "GBP",
+    spend: 1464.24, impressions: 61380, reach: 25437, frequency: 2.41,
+    clicks: 3524, ctr: 5.74, cpc: 0.42, cpm: 23.86, linkClicks: 2175, lpv: 1295,
+    smeLeads: 16, smeSpend: 495.7, bofuTrials: 8, bofuSpend: 511.46,
+  },
 ];
 
-/** A few real active Meta campaign names (for the creative/campaign context). */
-export const META_CAMPAIGNS: [AcctCode, string, string][] = [
-  ["au-meta", "BOFU-Conversions-Jun2026", "Sales"],
-  ["au-meta", "TOFU-Leads-Publications-May2026", "Leads"],
-  ["au-meta", "TOFU-Traffic-Jun2025", "Traffic"],
-  ["uk-meta", "UK-BOFU-Conversions-2026", "Sales"],
-  ["uk-meta", "UK-TOFU-Leads-2026", "Leads"],
+/** Real active Meta campaigns (last_30d) with their own distinct metrics. */
+export const META_CAMPAIGNS: MetaCampaignSnap[] = [
+  {
+    acct: "au-meta", market: "AU", currency: "AUD",
+    id: "au-bofu-conversions-jun2026", name: "BOFU-Conversions-Jun2026", funnel: "BOFU", objective: "Sales",
+    spend: 1865.2, impressions: 62344, reach: 20291, frequency: 3.07, clicks: 1019, ctr: 1.63, cpc: 1.83, cpm: 29.92,
+    linkClicks: 373, lpv: 267, leads: 0, leadCpl: null, trials: 43, trialCpl: 43.38,
+  },
+  {
+    acct: "au-meta", market: "AU", currency: "AUD",
+    id: "au-tofu-leads-publications-may2026", name: "TOFU-Leads-Publications-May2026", funnel: "SME Publication", objective: "Leads",
+    spend: 1324.27, impressions: 61238, reach: 25991, frequency: 2.36, clicks: 1556, ctr: 2.54, cpc: 0.85, cpm: 21.62,
+    linkClicks: 1556, lpv: 16, leads: 77, leadCpl: 17.2, trials: 0, trialCpl: null,
+  },
+  {
+    acct: "au-meta", market: "AU", currency: "AUD",
+    id: "au-tofu-traffic-jun2026", name: "TOFU-Traffic-Jun2026", funnel: "Traffic", objective: "Traffic",
+    spend: 1194.48, impressions: 83319, reach: 42059, frequency: 1.98, clicks: 4068, ctr: 4.88, cpc: 0.29, cpm: 14.34,
+    linkClicks: 3996, lpv: 3455, leads: 0, leadCpl: null, trials: 0, trialCpl: null,
+  },
+  {
+    acct: "uk-meta", market: "UK", currency: "GBP",
+    id: "uk-bofu-conversions-jun2026", name: "BOFU-Conversions-Jun2026", funnel: "BOFU", objective: "Sales",
+    spend: 511.46, impressions: 12097, reach: 3663, frequency: 3.3, clicks: 366, ctr: 3.03, cpc: 1.4, cpm: 42.28,
+    linkClicks: 168, lpv: 58, leads: 0, leadCpl: null, trials: 8, trialCpl: 63.93,
+  },
+  {
+    acct: "uk-meta", market: "UK", currency: "GBP",
+    id: "uk-tofu-leads-publications-may2026", name: "TOFU-Leads-Publications-May2026", funnel: "SME Publication", objective: "Leads",
+    spend: 495.7, impressions: 19856, reach: 7049, frequency: 2.82, clicks: 279, ctr: 1.41, cpc: 1.78, cpm: 24.96,
+    linkClicks: 279, lpv: 1, leads: 16, leadCpl: 30.98, trials: 0, trialCpl: null,
+  },
+  {
+    acct: "uk-meta", market: "UK", currency: "GBP",
+    id: "uk-tofu-traffic-jun2026", name: "TOFU-Traffic-Jun2026", funnel: "Traffic", objective: "Traffic",
+    spend: 457.08, impressions: 29427, reach: 14794, frequency: 1.99, clicks: 2879, ctr: 9.78, cpc: 0.16, cpm: 15.53,
+    linkClicks: 2007, lpv: 1236, leads: 0, leadCpl: null, trials: 0, trialCpl: null,
+  },
 ];

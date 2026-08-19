@@ -8,6 +8,8 @@ import { QsImpactSection } from "@/components/panels/QsImpactSection";
 import { parseFilters, type FilterState } from "@/lib/filters/schema";
 import { hydrateLiveData } from "@/lib/data/source";
 import { scopedKeywords, qsSummary, qsHighSpendLow, qsNoScoreWithSpend } from "@/lib/data/quality";
+import { keywordSegments } from "@/lib/data/keyword-segments";
+import { KeywordSegmentsPanel } from "@/components/panels/KeywordSegmentsPanel";
 import { termsCache } from "@/lib/data/live-terms";
 import { qsImpact } from "@/lib/data/real/qs-impact";
 import type { Keyword } from "@/lib/domain/types";
@@ -40,6 +42,8 @@ export default async function QualityScorePage({
     NZ: "New Zealand",
   };
   const marketLabel = MARKET_LABEL[f.country] ?? "All markets";
+
+  const segments = keywordSegments(kws);
 
   const keywordRows: KeywordRow[] = [...kws]
     .sort((a, b) => b.spend - a.spend)
@@ -116,12 +120,20 @@ export default async function QualityScorePage({
             key: "keywords",
             label: "Keywords",
             panel: (
-              <Card>
-                <CardTitle action={<span className="text-[12px] text-muted">Top {keywordRows.length} by spend</span>}>
-                  Keyword quality detail
-                </CardTitle>
-                <KeywordsTable rows={keywordRows} />
-              </Card>
+              <div className="space-y-5">
+                <Card>
+                  <CardTitle action={<span className="text-[12px] text-muted">Action lists · last 30 days · native currency</span>}>
+                    Keyword segments
+                  </CardTitle>
+                  <KeywordSegmentsPanel poor={segments.poor} highCpc={segments.highCpc} lowIs={segments.lowIs} />
+                </Card>
+                <Card>
+                  <CardTitle action={<span className="text-[12px] text-muted">Top {keywordRows.length} by spend</span>}>
+                    Keyword quality detail
+                  </CardTitle>
+                  <KeywordsTable rows={keywordRows} />
+                </Card>
+              </div>
             ),
           },
         ]}

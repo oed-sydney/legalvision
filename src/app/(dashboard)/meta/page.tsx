@@ -2,12 +2,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { PanelTabs } from "@/components/ui/PanelTabs";
-import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsTable";
-import { CreativesGrid, type CreativeCard } from "@/components/panels/CreativesGrid";
+import { CampaignsTable } from "@/components/tables/CampaignsTable";
+import { MetaAdsPanel } from "@/components/panels/MetaAdsPanel";
 import { parseFilters, type FilterState } from "@/lib/filters/schema";
-import { hydrateLiveData } from "@/lib/data/source";
-import { buildReport } from "@/lib/data/report";
-import { realMetaCreatives } from "@/lib/data/real/meta-creatives";
+import { metaSummary, metaCampaignRows, META_WINDOW_LABEL, META_PULLED_AT } from "@/lib/data/real/meta";
+import { realMetaAds } from "@/lib/data/real/meta-creatives";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
 
 export default async function MetaPage({
@@ -15,122 +14,89 @@ export default async function MetaPage({
 }: {
   searchParams: Promise<Record<string, string>>;
 }) {
-  await hydrateLiveData();
   const raw = parseFilters(await searchParams);
   const f: FilterState = { ...raw, channel: "meta_ads" }; // Meta-only area
-  const report = buildReport(f);
-  const t = report.totals;
-  const cur = t.currency;
-  const est = t.estimated;
 
-  // Reach is non-additive — shown as a period-level proxy, never summed from daily rows.
-  const reachProxy = Math.round(t.impressions / 2.35);
-  const frequency = reachProxy ? t.impressions / reachProxy : null;
+  const s = metaSummary(f.country, f.account);
+  const cur = s.currency;
+  const est = s.estimated;
+  const campaignRows = metaCampaignRows(f.country, f.account);
+  const ads = realMetaAds().filter(
+    (a) => (f.country === "all" || a.market === f.country) && (f.account === "all" || a.accountId === f.account)
+  );
 
-  const creativeCards: CreativeCard[] = realMetaCreatives()
-    .filter((c) => (f.country === "all" || c.market === f.country) && (f.account === "all" || c.accountId === f.account))
-    .sort((a, b) => b.spend - a.spend)
-    .map((c) => ({
-      id: c.id,
-      adName: c.adName,
-      campaignName: c.campaignName,
-      adSetName: c.adSetName,
-      format: c.format,
-      primaryText: c.primaryText,
-      headline: c.headline,
-      cta: c.cta,
-      spend: c.spend,
-      impressions: c.impressions,
-      reach: c.reach,
-      frequency: c.frequency,
-      linkClicks: c.linkClicks,
-      leads: c.leads,
-      currency: c.currency,
-      thumbnailPath: c.thumbnailPath,
-      fatigue: c.fatigue,
-    }));
-
-  const campaignRows: CampaignRow[] = report.campaigns.map((c) => ({
-    campaignId: c.campaignId,
-    campaignName: c.campaignName,
-    campaignType: c.campaignType,
-    market: c.market,
-    channel: c.channel,
-    currency: c.currency,
-    estimated: c.estimated,
-    spend: c.spend,
-    impressions: c.impressions,
-    comparableClicks: c.comparableClicks,
-    leads: c.leads,
-    liveLeads: c.liveLeads,
-    cpll: c.cpll,
-    cvr: c.cvr,
-    ctr: c.ctr,
-    cpc: c.cpc,
-  }));
+  const cpl = (v: number | null) => (v != null ? formatMoney(v, cur, { estimated: est }) : "—");
 
   return (
     <div>
       <PageHeader
         title="Meta Ads"
-        subtitle={`${report.range.label} · Meta-native metrics · live leads pending lead-source integration`}
+        subtitle={`${META_WINDOW_LABEL} · real ad-level data pulled ${META_PULLED_AT} · SME Publication vs BOFU leads shown separately`}
       />
-      <PanelTabs
-        tabs={[
-          {
-            key: "snapshot",
-            label: "Snapshot",
-            panel: (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <KpiCard metricKey="spend" value={formatMoney(t.spend, cur, { estimated: est })} />
-                <KpiCard metricKey="impressions" value={formatInt(t.impressions)} />
-                <KpiCard metricKey="reach" value={formatInt(reachProxy)} footnote="period-level, non-additive" />
-                <KpiCard metricKey="frequency" value={frequency ? frequency.toFixed(2) : "—"} />
-                <KpiCard metricKey="link_clicks" value={formatInt(t.metaLinkClicks)} />
-                <KpiCard metricKey="landing_page_views" value={formatInt(t.landingPageViews)} />
-                <KpiCard metricKey="cpm" value={formatMoney(t.cpm, cur, { estimated: est })} />
-                <KpiCard metricKey="leads" value={formatInt(t.leads)} />
-                <KpiCard metricKey="ctr" label="CTR (link)" value={formatPercent(t.ctr)} />
-                <KpiCard metricKey="cpc" label="CPC (link)" value={formatMoney(t.cpc, cur, { estimated: est })} />
-              </div>
-            ),
-          },
-          {
-            key: "campaigns",
-            label: "Campaigns",
-            panel: (
-              <Card>
-                <CardTitle>Campaigns</CardTitle>
-                <CampaignsTable rows={campaignRows} variant="meta" csvName="meta_campaigns" />
-              </Card>
-            ),
-          },
-          {
-            key: "creatives",
-            label: "Ads & Creatives",
-            panel: (
-              <div>
-                <div className="mb-4 rounded-lg border border-[var(--lv-border)] bg-canvas px-4 py-2.5 text-[12px] text-secondary">
-                  Showing live ad copy (headline, primary text, CTA) from the Meta Marketing API. The creative image binary is fetched and cached server-side once a Meta system-user token is connected — Meta CDN URLs are access-restricted and can&apos;t be hot-linked.
+
+      {s.markets === 0 ? (
+        <Card>
+          <div className="px-1 py-6 text-[13px] text-secondary">
+            No Meta data for this selection. Meta NZ isn&apos;t connected yet (Meta Marketing API access is still
+            being rolled out for that ad account) — AU and UK are live.
+          </div>
+        </Card>
+      ) : (
+        <PanelTabs
+          tabs={[
+            {
+              key: "snapshot",
+              label: "Snapshot",
+              panel: (
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <KpiCard metricKey="spend" value={formatMoney(s.spend, cur, { estimated: est })} />
+                  <KpiCard metricKey="leads" label="SME Pub. leads" value={formatInt(s.smeLeads)} footnote="lead-form submissions" />
+                  <KpiCard metricKey="cpl" label="SME Pub. CPL" value={cpl(s.smeCpl)} />
+                  <KpiCard metricKey="leads" label="BOFU trials" value={formatInt(s.bofuTrials)} footnote="30-day trial signups" />
+                  <KpiCard metricKey="cpl" label="BOFU cost / trial" value={cpl(s.bofuCpl)} />
+                  <KpiCard metricKey="ctr" label="CTR (link)" value={formatPercent(s.ctr)} />
+                  <KpiCard metricKey="frequency" value={s.frequency ? s.frequency.toFixed(2) : "—"} />
+                  <KpiCard metricKey="link_clicks" value={formatInt(s.linkClicks)} />
+                  <KpiCard metricKey="landing_page_views" value={formatInt(s.lpv)} />
+                  <KpiCard metricKey="cpc" label="CPC (link)" value={formatMoney(s.cpc, cur, { estimated: est })} />
+                  <KpiCard metricKey="cpm" value={formatMoney(s.cpm, cur, { estimated: est })} />
+                  <KpiCard metricKey="reach" value={formatInt(s.reach)} footnote="period-level, non-additive" />
+                  <KpiCard metricKey="impressions" value={formatInt(s.impressions)} />
                 </div>
-                <CreativesGrid creatives={creativeCards} />
-              </div>
-            ),
-          },
-          {
-            key: "placements",
-            label: "Placements",
-            panel: (
-              <Card>
-                <CardTitle action={<span className="text-[12px] text-muted">Meta breakdowns stored as separate facts — never cross-joined</span>}>
-                  Placements
-                </CardTitle>
-                <PlacementTable currency={cur} totalSpend={t.spend} totalClicks={t.metaLinkClicks} />
-              </Card>
-            ),
-          },
-        ]}
-      />
+              ),
+            },
+            {
+              key: "campaigns",
+              label: "Campaigns",
+              panel: (
+                <Card>
+                  <CardTitle action={<span className="text-[12px] text-muted">Active campaigns · last 30 days · each with its own metrics</span>}>
+                    Campaigns
+                  </CardTitle>
+                  <CampaignsTable rows={campaignRows} variant="meta" csvName="meta_campaigns" />
+                </Card>
+              ),
+            },
+            {
+              key: "creatives",
+              label: "Ads & Creatives",
+              panel: <MetaAdsPanel ads={ads} />,
+            },
+            {
+              key: "placements",
+              label: "Placements",
+              panel: (
+                <Card>
+                  <CardTitle action={<span className="text-[12px] text-muted">Estimated placement mix — connect the Meta placement breakdown for exact splits</span>}>
+                    Placements
+                  </CardTitle>
+                  <PlacementTable currency={cur} totalSpend={s.spend} totalClicks={s.linkClicks} />
+                </Card>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
