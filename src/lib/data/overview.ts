@@ -129,10 +129,15 @@ export async function marketPacing(f: FilterState): Promise<{
     projMoney.push({ amount: projected, currency: m.currency });
   }
 
+  // Single market in scope → report the overall in that market's native currency (exact,
+  // no FX). Only convert to the reporting currency when markets of differing currencies
+  // are combined (the "All markets" case), which is the only path that shows "≈".
   const multi = new Set(markets.map((m) => m.currency)).size > 1;
-  const budget = convertAndSum(budgetMoney, REPORTING_CURRENCY, fxTable).amount;
-  const spend = convertAndSum(spendMoney, REPORTING_CURRENCY, fxTable).amount;
-  const projected = convertAndSum(projMoney, REPORTING_CURRENCY, fxTable).amount;
+  const overallCurrency: CurrencyCode = multi ? REPORTING_CURRENCY : markets[0]?.currency ?? REPORTING_CURRENCY;
+  const sumNative = (arr: Money[]) => arr.reduce((s, x) => s + x.amount, 0);
+  const budget = multi ? convertAndSum(budgetMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(budgetMoney);
+  const spend = multi ? convertAndSum(spendMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(spendMoney);
+  const projected = multi ? convertAndSum(projMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(projMoney);
 
   return {
     markets,
@@ -142,7 +147,7 @@ export async function marketPacing(f: FilterState): Promise<{
       projected,
       utilisation: budget ? spend / budget : 0,
       estimated: multi,
-      currency: REPORTING_CURRENCY,
+      currency: overallCurrency,
     },
   };
 }

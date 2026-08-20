@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import { ExternalLink } from "lucide-react";
 import { DataTable, type ColMeta } from "@/components/ui/DataTable";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
 import type { SegmentRow } from "@/lib/data/keyword-segments";
@@ -71,6 +72,32 @@ function intCol(id: string, header: string, key: keyof SegmentRow): ColumnDef<Se
   };
 }
 
+/** Trailing action: open the keyword's account in Google Ads to pause / remove it there. */
+function adsCol(): ColumnDef<SegmentRow, unknown> {
+  return {
+    id: "action",
+    header: "",
+    enableSorting: false,
+    cell: (c) => {
+      const url = c.row.original.googleAdsUrl;
+      if (!url) return null;
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open “${c.row.original.text}” in Google Ads to pause or remove it`}
+          className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Google Ads <ExternalLink className="h-3 w-3" />
+        </a>
+      );
+    },
+    meta: { align: "right" },
+  };
+}
+
 function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
   if (seg === "poor") {
     return [
@@ -81,6 +108,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       moneyCol("cpc", "CPC", "cpc"),
       intCol("conversions", "Conv.", "conversions"),
       intCol("liveLeads", "Live leads", "liveLeads"),
+      adsCol(),
     ];
   }
   if (seg === "highCpc") {
@@ -98,6 +126,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       },
       moneyCol("spend", "Spend", "spend"),
       intCol("conversions", "Conv.", "conversions"),
+      adsCol(),
     ];
   }
   // lowIs
@@ -118,6 +147,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       ...num(),
     },
     moneyCol("spend", "Spend", "spend"),
+    adsCol(),
   ];
 }
 
@@ -143,7 +173,7 @@ export function KeywordSegmentsPanel({
       key: "poor",
       label: "Poor performing",
       count: poor.length,
-      blurb: `Spend over ${POOR_SPEND_MIN} (native currency) with zero conversions and zero live leads in the last 30 days — candidates to pause or rework.`,
+      blurb: `Spend over ${POOR_SPEND_MIN} (native currency) with zero conversions and zero live leads in the last 30 days — candidates to pause or rework. Use the Google Ads button to jump straight to the account and pause/remove.`,
     },
     {
       key: "highCpc",

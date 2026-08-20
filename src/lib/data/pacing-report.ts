@@ -142,16 +142,20 @@ export function pacingOverall(markets: MarketRollup[]): OverallPacing {
     amount: m.pacing.projectedSpend ?? m.spend,
     currency: m.currency,
   }));
+  // Single market in scope → keep its native currency (exact). Convert to the reporting
+  // currency only when combining markets of differing currencies ("All markets").
   const multi = new Set(markets.map((m) => m.currency)).size > 1;
-  const budget = convertAndSum(budgetMoney, REPORTING_CURRENCY, fxTable).amount;
-  const spend = convertAndSum(spendMoney, REPORTING_CURRENCY, fxTable).amount;
-  const projected = convertAndSum(projMoney, REPORTING_CURRENCY, fxTable).amount;
+  const overallCurrency: CurrencyCode = multi ? REPORTING_CURRENCY : markets[0]?.currency ?? REPORTING_CURRENCY;
+  const sumNative = (arr: Money[]) => arr.reduce((s, x) => s + x.amount, 0);
+  const budget = multi ? convertAndSum(budgetMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(budgetMoney);
+  const spend = multi ? convertAndSum(spendMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(spendMoney);
+  const projected = multi ? convertAndSum(projMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(projMoney);
   const anyPacing = markets[0]?.pacing;
   return {
     budget,
     spend,
     projected,
-    currency: REPORTING_CURRENCY,
+    currency: overallCurrency,
     estimated: multi,
     elapsedPct: anyPacing?.periodElapsedPct ?? 0,
     daysRemaining: anyPacing?.daysRemaining ?? 0,

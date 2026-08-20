@@ -1,5 +1,17 @@
 import type { CurrencyCode, Keyword } from "../domain/types";
 import { tcpaTargets } from "./real/tcpa";
+import { AD_ACCOUNTS } from "../domain/accounts";
+
+/** Google Ads customer id (digits only) per internal account id, for deep links. */
+const GOOGLE_CID: Record<string, string> = Object.fromEntries(
+  AD_ACCOUNTS.filter((a) => a.channel === "google_ads").map((a) => [a.id, a.platformAccountId.replace(/\D/g, "")])
+);
+
+/** Deep link to the account's keyword table in Google Ads (opens with the account selected). */
+function googleAdsKeywordsUrl(accountId: string): string | null {
+  const cid = GOOGLE_CID[accountId];
+  return cid ? `https://ads.google.com/aw/keywords?__c=${cid}` : null;
+}
 
 /**
  * Keyword performance segments for the Quality Score → Keywords sub-tabs.
@@ -32,6 +44,7 @@ export interface SegmentRow {
   accountAvgCpc: number;
   vsAvgCpcPct: number | null; // (cpc − acctAvg) / acctAvg
   vsTargetPct: number | null; // (costPerConv − targetCpa) / targetCpa
+  googleAdsUrl: string | null; // deep link to the account's keywords in Google Ads
 }
 
 export interface KeywordSegments {
@@ -82,6 +95,7 @@ export function keywordSegments(kws: Keyword[]): KeywordSegments {
       accountAvgCpc: acctAvg,
       vsAvgCpcPct: cpc != null && acctAvg > 0 ? (cpc - acctAvg) / acctAvg : null,
       vsTargetPct: costPerConv != null && target ? (costPerConv - target) / target : null,
+      googleAdsUrl: googleAdsKeywordsUrl(k.accountId),
     };
   });
 

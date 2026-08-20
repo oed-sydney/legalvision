@@ -8,6 +8,7 @@ import { AD_ACCOUNTS } from "@/lib/domain/accounts";
 import { campaignMetas, hydrateLiveData } from "@/lib/data/source";
 import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { readSyncState } from "@/lib/data/sync-state";
+import { cookies } from "next/headers";
 import { UserMenu } from "@/components/shell/UserMenu";
 import { getSessionProfile } from "@/lib/auth/session";
 
@@ -30,8 +31,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const runs = syncRuns();
   const sync = await readSyncState();
-  // Freshness relative to the last refresh (real wall-clock), falling back to snapshot time.
-  const lastSyncedHours = Math.max(0, (Date.now() - new Date(sync.lastSyncedAt).getTime()) / 3_600_000);
+  // Freshness = the most recent of the global KV timestamp and this browser's refresh
+  // cookie. The cookie keeps the chip advancing even where KV isn't configured to persist.
+  const cookieAt = (await cookies()).get("lv_sync_at")?.value;
+  const kvMs = new Date(sync.lastSyncedAt).getTime();
+  const cookieMs = cookieAt ? new Date(cookieAt).getTime() : 0;
+  const effectiveMs = Math.max(kvMs || 0, cookieMs || 0);
+  const lastSyncedHours = Math.max(0, (Date.now() - effectiveMs) / 3_600_000);
   const sources = runs
     .filter((r) => r.source === "google_ads" || r.source === "meta_ads" || r.source === "fx" || r.source === "live_leads")
     .map((r) => ({

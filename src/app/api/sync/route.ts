@@ -18,6 +18,16 @@ import { refreshBudgetLost } from "@/lib/data/budget-lost";
 // The live Windsor pull can take ~30s; allow headroom on serverless.
 export const maxDuration = 60;
 
+/**
+ * Stamp the refresh time in a cookie as well as KV. KV is the global source of truth, but
+ * on hosts where the KV service-role key isn't configured the write silently no-ops — the
+ * cookie guarantees the freshness chip still advances for the person who hit Refresh.
+ */
+function stamp(res: NextResponse, at: string): NextResponse {
+  res.cookies.set("lv_sync_at", at, { sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 90 });
+  return res;
+}
+
 export async function POST() {
   const now = new Date().toISOString();
   try {
@@ -38,7 +48,7 @@ export async function POST() {
         note: `Live Windsor pull: ${rows} rows across ${days} days.`,
       });
       ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
-      return NextResponse.json({ ok: true, mode: "live", rowsGoogle: rows, days, syncedAt: now });
+      return stamp(NextResponse.json({ ok: true, mode: "live", rowsGoogle: rows, days, syncedAt: now }), now);
     }
     const prev = await readSyncState();
     await writeSyncState({
@@ -47,12 +57,12 @@ export async function POST() {
       mode: "snapshot",
       note: "Snapshot re-validated. Add WINDSOR_API_KEY for a live Google pull.",
     });
-    return NextResponse.json({
+    return stamp(NextResponse.json({
       ok: true,
       mode: "snapshot",
       syncedAt: now,
       hint: "Set WINDSOR_API_KEY to enable live Google refresh; META_SYSTEM_USER_TOKEN for Meta.",
-    });
+    }), now);
   } catch (err) {
     // Live pull needs a writable cache; on read-only serverless hosts it can't persist.
     // Degrade to a snapshot re-stamp so the button still succeeds against baked data.
@@ -65,13 +75,13 @@ export async function POST() {
         note: "Live refresh unavailable in this environment — serving the latest snapshot.",
       });
       ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
-      return NextResponse.json({
+      return stamp(NextResponse.json({
         ok: true,
         mode: "snapshot",
         syncedAt: now,
         note: "Live refresh unavailable here; snapshot re-validated.",
         detail: err instanceof Error ? err.message : undefined,
-      });
+      }), now);
     } catch (err2) {
       return NextResponse.json(
         { ok: false, error: err2 instanceof Error ? err2.message : "Sync failed" },

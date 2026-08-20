@@ -1,11 +1,12 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { KpiCard } from "@/components/ui/KpiCard";
-import { ComboTrend } from "@/components/charts/ComboTrend";
+import { SpendLeadsTrend } from "@/components/charts/SpendLeadsTrend";
 import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsTable";
 import { parseFilters } from "@/lib/filters/schema";
 import { buildReport } from "@/lib/data/report";
 import { marketPacing, marketTotals } from "@/lib/data/overview";
+import { googleMonthEndForecast, type MarketForecast } from "@/lib/data/forecast";
 import { hydrateLiveData } from "@/lib/data/source";
 import { marketName } from "@/lib/domain/accounts";
 import {
@@ -32,6 +33,7 @@ export default async function OverviewPage({
 
   const pacing = await marketPacing(f);
   const markets = marketTotals(f, range.from, range.to);
+  const gForecast = await googleMonthEndForecast(f);
 
   const spendSeries = trend.points.map((x) => x.spend);
   const llSeries = trend.points.map((x) => x.liveLeads);
@@ -132,7 +134,7 @@ export default async function OverviewPage({
         >
           Spend &amp; Live leads over time
         </CardTitle>
-        <ComboTrend data={trend.points} currency={trend.currency} estimated={trend.estimated} />
+        <SpendLeadsTrend data={trend.points} currency={trend.currency} estimated={trend.estimated} />
       </Card>
 
       {/* Row 4 — pacing summary */}
@@ -145,6 +147,14 @@ export default async function OverviewPage({
             <MarketPacingBar key={m.market} m={m} />
           ))}
         </div>
+      </Card>
+
+      {/* Row 4b — Google Ads month-end forecast by jurisdiction */}
+      <Card className="mt-6">
+        <CardTitle action={<span className="text-[12px] text-muted">Google Ads · current month · native currency per market</span>}>
+          Forecasted month-end spend by jurisdiction
+        </CardTitle>
+        <ForecastTable rows={gForecast} />
       </Card>
 
       {/* Row 5 — country comparison */}
@@ -261,6 +271,45 @@ function MarketPacingBar({ m }: { m: import("@/lib/data/overview").MarketPacing 
         <span>{sym}{Math.round(m.spend).toLocaleString("en-AU")} / {sym}{Math.round(m.budget).toLocaleString("en-AU")}</span>
         <span>{formatPercent(util)}</span>
       </div>
+    </div>
+  );
+}
+
+function ForecastTable({ rows }: { rows: MarketForecast[] }) {
+  if (rows.length === 0) {
+    return <p className="text-[13px] text-muted">No Google Ads spend in the current scope.</p>;
+  }
+  return (
+    <div className="overflow-x-auto lv-scroll">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="border-b border-[var(--lv-border)] text-[11px] uppercase tracking-wide text-secondary">
+            <th className="py-2 pr-3 text-left">Jurisdiction</th>
+            <th className="px-3 py-2 text-right">Spend to date</th>
+            <th className="px-3 py-2 text-right">Forecast month-end</th>
+            <th className="px-3 py-2 text-right">Budget</th>
+            <th className="px-3 py-2 text-right">vs budget</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.market} className="border-b border-[var(--lv-border)] last:border-0">
+              <td className="py-2 pr-3">
+                <span className="flex items-center gap-2">
+                  <span className="font-medium text-ink">{marketName(r.market)}</span>
+                  <PacingStatusPill status={r.status} />
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right tnum text-secondary">{formatMoney(r.mtdSpend, r.currency)}</td>
+              <td className="px-3 py-2 text-right tnum font-semibold text-ink">{formatMoney(r.projected, r.currency)}</td>
+              <td className="px-3 py-2 text-right tnum text-secondary">{r.budget ? formatMoney(r.budget, r.currency) : "—"}</td>
+              <td className={`px-3 py-2 text-right tnum font-medium ${r.variancePct == null ? "text-muted" : r.variancePct > 0 ? "text-danger" : "text-success"}`}>
+                {r.variancePct == null ? "—" : `${r.variancePct > 0 ? "+" : ""}${Math.round(r.variancePct * 100)}%`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
