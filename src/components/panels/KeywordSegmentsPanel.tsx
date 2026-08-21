@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, EyeOff, RotateCcw } from "lucide-react";
 import { DataTable, type ColMeta } from "@/components/ui/DataTable";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
 import type { SegmentRow } from "@/lib/data/keyword-segments";
@@ -14,6 +14,27 @@ import {
 } from "@/lib/data/keyword-segments";
 
 type SegKey = "poor" | "highCpc" | "lowIs";
+
+const HIDDEN_KEY = "lv-kw-hidden"; // per-user hidden keyword ids (actioned rows)
+
+/** Colour token per match type so exact / phrase / broad read at a glance. */
+const MATCH_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  exact: { bg: "#EEF2FF", fg: "#4338CA", label: "Exact" },
+  phrase: { bg: "#ECFDF5", fg: "#0F766E", label: "Phrase" },
+  broad: { bg: "#FFF7ED", fg: "#C2410C", label: "Broad" },
+};
+
+function MatchBadge({ type }: { type: string }) {
+  const s = MATCH_STYLE[type] ?? { bg: "#F1F5F9", fg: "#475569", label: type };
+  return (
+    <span
+      className="mt-0.5 inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+      style={{ background: s.bg, color: s.fg }}
+    >
+      {s.label}
+    </span>
+  );
+}
 
 function num(extra?: Partial<ColMeta>): { meta: ColMeta } {
   return { meta: { align: "right", numeric: true, ...extra } };
@@ -32,7 +53,7 @@ function kwCol(): ColumnDef<SegmentRow, unknown> {
     cell: (c) => (
       <div className="min-w-0">
         <div className="truncate font-medium text-ink" title={c.row.original.text}>{c.row.original.text}</div>
-        <div className="text-[11px] text-muted">{c.row.original.matchType}</div>
+        <MatchBadge type={c.row.original.matchType} />
       </div>
     ),
     meta: { align: "left", sticky: true },
@@ -72,33 +93,48 @@ function intCol(id: string, header: string, key: keyof SegmentRow): ColumnDef<Se
   };
 }
 
-/** Trailing action: open the keyword's account in Google Ads to pause / remove it there. */
-function adsCol(): ColumnDef<SegmentRow, unknown> {
+/** Trailing actions: open in Google Ads (to pause/remove) + hide the row once actioned. */
+function actionsCol(onHide: (id: string) => void): ColumnDef<SegmentRow, unknown> {
   return {
     id: "action",
     header: "",
     enableSorting: false,
     cell: (c) => {
-      const url = c.row.original.googleAdsUrl;
-      if (!url) return null;
+      const r = c.row.original;
       return (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Open “${c.row.original.text}” in Google Ads to pause or remove it`}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
-          onClick={(e) => e.stopPropagation()}
-        >
-          Google Ads <ExternalLink className="h-3 w-3" />
-        </a>
+        <div className="flex items-center justify-end gap-1.5">
+          {r.googleAdsUrl && (
+            <a
+              href={r.googleAdsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Open “${r.text}” in Google Ads to pause or remove it`}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Google Ads <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          <button
+            type="button"
+            title="Hide this row (once you've actioned it)"
+            aria-label={`Hide ${r.text}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onHide(r.id);
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
+          >
+            <EyeOff className="h-3 w-3" /> Hide
+          </button>
+        </div>
       );
     },
     meta: { align: "right" },
   };
 }
 
-function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
+function columnsFor(seg: SegKey, onHide: (id: string) => void): ColumnDef<SegmentRow, unknown>[] {
   if (seg === "poor") {
     return [
       kwCol(),
@@ -108,7 +144,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       moneyCol("cpc", "CPC", "cpc"),
       intCol("conversions", "Conv.", "conversions"),
       intCol("liveLeads", "Live leads", "liveLeads"),
-      adsCol(),
+      actionsCol(onHide),
     ];
   }
   if (seg === "highCpc") {
@@ -126,7 +162,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       },
       moneyCol("spend", "Spend", "spend"),
       intCol("conversions", "Conv.", "conversions"),
-      adsCol(),
+      actionsCol(onHide),
     ];
   }
   // lowIs
@@ -147,7 +183,7 @@ function columnsFor(seg: SegKey): ColumnDef<SegmentRow, unknown>[] {
       ...num(),
     },
     moneyCol("spend", "Spend", "spend"),
-    adsCol(),
+    actionsCol(onHide),
   ];
 }
 
@@ -167,33 +203,85 @@ export function KeywordSegmentsPanel({
   lowIs: SegmentRow[];
 }) {
   const [seg, setSeg] = useState<SegKey>("poor");
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_KEY);
+      if (raw) setHidden(new Set(JSON.parse(raw) as string[]));
+    } catch {}
+  }, []);
+
+  const persist = (s: Set<string>) => {
+    try {
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s]));
+    } catch {}
+  };
+
+  const hide = useCallback((id: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      persist(next);
+      return next;
+    });
+  }, []);
+
+  const restoreAll = () => {
+    setHidden(() => {
+      persist(new Set());
+      return new Set();
+    });
+  };
+
+  const visible = useCallback((rows: SegmentRow[]) => rows.filter((r) => !hidden.has(r.id)), [hidden]);
+  const poorV = visible(poor);
+  const highV = visible(highCpc);
+  const lowV = visible(lowIs);
+
+  // How many rows currently in scope are hidden (for the restore affordance).
+  const inScopeIds = useMemo(() => new Set([...poor, ...highCpc, ...lowIs].map((r) => r.id)), [poor, highCpc, lowIs]);
+  const hiddenInScope = [...hidden].filter((id) => inScopeIds.has(id)).length;
 
   const tabs: { key: SegKey; label: string; count: number; blurb: string }[] = [
     {
       key: "poor",
       label: "Poor performing",
-      count: poor.length,
-      blurb: `Spend over ${POOR_SPEND_MIN} (native currency) with zero conversions and zero live leads in the last 30 days — candidates to pause or rework. Use the Google Ads button to jump straight to the account and pause/remove.`,
+      count: poorV.length,
+      blurb: `Spend over ${POOR_SPEND_MIN} (native currency) with zero conversions and zero live leads in the last 30 days — candidates to pause or rework. Open in Google Ads to pause/remove, then Hide the row once it's actioned.`,
     },
     {
       key: "highCpc",
       label: "High CPC",
-      count: highCpc.length,
+      count: highV.length,
       blurb: `CPC more than ${Math.round((HIGH_CPC_MULTIPLE - 1) * 100)}% above the keyword's account-average CPC — review bids, match types and Quality Score.`,
     },
     {
       key: "lowIs",
       label: "Low IS",
-      count: lowIs.length,
+      count: lowV.length,
       blurb: `Proven, efficient keywords worth scaling: more than ${LOW_IS_MIN_CONV} conversions and cost/conv at or within ${Math.round(
         LOW_IS_CPA_TOLERANCE * 100
       )}% of the campaign's target CPA — strong candidates to raise bids/budget where impression share is limited.`,
     },
   ];
 
-  const data = seg === "poor" ? poor : seg === "highCpc" ? highCpc : lowIs;
-  const columns = useMemo(() => columnsFor(seg), [seg]);
+  const data = seg === "poor" ? poorV : seg === "highCpc" ? highV : lowV;
+  const columns = useMemo(() => columnsFor(seg, hide), [seg, hide]);
   const active = tabs.find((t) => t.key === seg)!;
+
+  const restoreNote =
+    hiddenInScope > 0 ? (
+      <button
+        type="button"
+        onClick={restoreAll}
+        title="Show all hidden keyword rows again"
+        className="inline-flex items-center gap-1 text-[12px] font-medium text-secondary hover:text-ink"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+        {hiddenInScope} hidden · Restore
+      </button>
+    ) : undefined;
 
   return (
     <div>
@@ -226,6 +314,7 @@ export function KeywordSegmentsPanel({
         csvName={`keywords_${seg}`}
         searchPlaceholder="Search keywords…"
         initialSort={SORT[seg]}
+        toolbarNote={restoreNote}
         emptyMessage="No keywords match this segment in the current scope."
       />
     </div>
