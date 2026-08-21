@@ -108,9 +108,13 @@ function actionsCol(onHide: (id: string) => void): ColumnDef<SegmentRow, unknown
               href={r.googleAdsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              title={`Open “${r.text}” in Google Ads to pause or remove it`}
+              title={`Open this account's keywords in Google Ads and copy “${r.text}” to paste into search`}
               className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Google can't deep-link to a single keyword row; copy the text so it's ready to paste.
+                navigator.clipboard?.writeText(r.text).catch(() => {});
+              }}
             >
               Google Ads <ExternalLink className="h-3 w-3" />
             </a>

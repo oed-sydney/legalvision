@@ -7,10 +7,24 @@ const GOOGLE_CID: Record<string, string> = Object.fromEntries(
   AD_ACCOUNTS.filter((a) => a.channel === "google_ads").map((a) => [a.id, a.platformAccountId.replace(/\D/g, "")])
 );
 
-/** Deep link to the account's keyword table in Google Ads (opens with the account selected). */
+/**
+ * Obfuscated customer id (`ocid`) per Google account — this is how the Google Ads UI selects
+ * an account, so linking with it opens straight into the right account (no sign-in / account
+ * chooser). Supplied by the client from each account's URL; not derivable from the customer id.
+ */
+const GOOGLE_OCID: Record<string, string> = {
+  "au-google": "80099916",
+  "uk-google": "844818473",
+  "nz-google": "624968089",
+};
+
+/** Deep link to the account's keyword table in Google Ads (opens with that account selected). */
 function googleAdsKeywordsUrl(accountId: string): string | null {
+  const ocid = GOOGLE_OCID[accountId];
   const cid = GOOGLE_CID[accountId];
-  return cid ? `https://ads.google.com/aw/keywords?__c=${cid}` : null;
+  if (!ocid) return cid ? `https://ads.google.com/aw/keywords?__c=${cid}` : null;
+  const c = cid ? `&__c=${cid}` : "";
+  return `https://ads.google.com/aw/keywords?ocid=${ocid}${c}`;
 }
 
 /**
