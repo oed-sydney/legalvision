@@ -172,6 +172,11 @@ function SummaryPanel({
               <dl className="grid grid-cols-2 gap-y-1.5 text-[12px]">
                 <Row k="Market budget" v={`${sym}${Math.round(m.budget).toLocaleString("en-AU")}`} />
                 <Row k="Spend" v={`${sym}${Math.round(m.spend).toLocaleString("en-AU")}`} />
+                <Row
+                  k="Forecast (mo-end)"
+                  v={m.pacing.projectedSpend != null ? `${sym}${Math.round(m.pacing.projectedSpend).toLocaleString("en-AU")}` : "—"}
+                  tone={m.pacing.projectedSpend != null && m.budget > 0 && m.pacing.projectedSpend > m.budget ? "text-danger" : undefined}
+                />
                 <Row k="Expected" v={m.pacing.expectedSpend != null ? `${sym}${Math.round(m.pacing.expectedSpend).toLocaleString("en-AU")}` : "—"} />
                 <Row k="Required/day" v={m.pacing.requiredDailySpend != null ? `${sym}${Math.round(m.pacing.requiredDailySpend).toLocaleString("en-AU")}` : "—"} />
               </dl>
@@ -266,11 +271,11 @@ function Hero({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, tone }: { k: string; v: string; tone?: string }) {
   return (
     <>
       <dt className="text-secondary">{k}</dt>
-      <dd className="text-right font-medium tnum text-ink">{v}</dd>
+      <dd className={`text-right font-medium tnum ${tone ?? "text-ink"}`}>{v}</dd>
     </>
   );
 }
