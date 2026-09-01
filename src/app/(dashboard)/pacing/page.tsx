@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { PacingStatusPill } from "@/components/ui/StatusPill";
@@ -12,6 +13,8 @@ import {
   pacingCurve,
   pacingMarkets,
   pacingOverall,
+  lastMonthPerformance,
+  type LastMonthPerformance,
 } from "@/lib/data/pacing-report";
 import { currentPeriod } from "@/lib/data/period";
 import { hydrateLiveData } from "@/lib/data/source";
@@ -31,6 +34,7 @@ export default async function PacingPage({
   const overall = pacingOverall(markets);
   const curve = pacingCurve(f, overall);
   const campaigns = pacingCampaigns(f);
+  const lastMonth = await lastMonthPerformance(f);
 
   const accountRows: PacingTableRow[] = accounts.map((a) => ({
     key: a.accountId,
@@ -106,6 +110,11 @@ export default async function PacingPage({
                 />
               </Card>
             ),
+          },
+          {
+            key: "last-month",
+            label: "Last month",
+            panel: <LastMonthPanel data={lastMonth} />,
           },
         ]}
       />
@@ -263,12 +272,103 @@ function SummaryPanel({
   );
 }
 
-function Hero({ label, value }: { label: string; value: string }) {
+function Hero({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="flex flex-col justify-between">
       <div className="text-[12px] font-medium uppercase tracking-[0.04em] text-secondary">{label}</div>
-      <div className="mt-2 text-[28px] font-bold leading-none tnum text-ink">{value}</div>
+      <div className={`mt-2 text-[28px] font-bold leading-none tnum ${tone ?? "text-ink"}`}>{value}</div>
     </div>
+  );
+}
+
+function pctTone(pct: number): string {
+  if (pct > 1.05) return "text-danger"; // overspent
+  if (pct < 0.9) return "text-warning"; // materially underspent
+  return "text-success"; // on budget
+}
+
+function LastMonthPanel({ data }: { data: LastMonthPerformance }) {
+  const o = data.overall;
+  const variance = o.spend - o.budget;
+  const pct = o.budget ? o.spend / o.budget : 0;
+  const m$ = (v: number, cur: import("@/lib/domain/types").CurrencyCode, est = false) => formatMoney(v, cur, { estimated: est });
+
+  return (
+    <Card>
+      <CardTitle action={<span className="text-[12px] text-muted">Final spend vs current monthly budget</span>}>
+        {data.label} — pacing performance
+      </CardTitle>
+
+      {data.markets.length === 0 ? (
+        <p className="text-[13px] text-muted">No spend recorded for {data.label} in the current scope.</p>
+      ) : (
+        <>
+          <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <Hero label="Total budget" value={m$(o.budget, o.currency, o.estimated)} />
+            <Hero label="Total spend" value={m$(o.spend, o.currency, o.estimated)} />
+            <Hero
+              label="Variance"
+              value={`${variance >= 0 ? "+" : "−"}${m$(Math.abs(variance), o.currency, o.estimated)}`}
+              tone={variance > 0 ? "text-danger" : "text-success"}
+            />
+            <Hero label="% of budget" value={formatPercent(pct)} tone={pctTone(pct)} />
+          </div>
+
+          <div className="overflow-x-auto lv-scroll">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-[var(--lv-border)] text-[11px] uppercase tracking-wide text-secondary">
+                  <th className="py-2 pr-3 text-left">Segment</th>
+                  <th className="px-3 py-2 text-right">Budget</th>
+                  <th className="px-3 py-2 text-right">Spent</th>
+                  <th className="px-3 py-2 text-right">Variance</th>
+                  <th className="px-3 py-2 text-right">% of budget</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.markets.map((mk) => {
+                  const mv = mk.spend - mk.budget;
+                  const mp = mk.budget ? mk.spend / mk.budget : 0;
+                  return (
+                    <Fragment key={mk.market}>
+                      <tr className="border-b border-[var(--lv-border)] bg-canvas/40">
+                        <td className="py-2 pr-3 font-semibold text-ink">{marketName(mk.market)}</td>
+                        <td className="px-3 py-2 text-right tnum">{m$(mk.budget, mk.currency)}</td>
+                        <td className="px-3 py-2 text-right tnum font-semibold">{m$(mk.spend, mk.currency)}</td>
+                        <td className={`px-3 py-2 text-right tnum font-medium ${mv > 0 ? "text-danger" : "text-success"}`}>
+                          {mv >= 0 ? "+" : "−"}{m$(Math.abs(mv), mk.currency)}
+                        </td>
+                        <td className={`px-3 py-2 text-right tnum font-medium ${pctTone(mp)}`}>{formatPercent(mp)}</td>
+                      </tr>
+                      {mk.accounts.map((a) => {
+                        const av = a.spend - a.budget;
+                        const ap = a.budget ? a.spend / a.budget : 0;
+                        return (
+                          <tr key={a.accountId} className="border-b border-[var(--lv-border)] last:border-0">
+                            <td className="py-1.5 pr-3 pl-4 text-secondary">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="inline-block h-2 w-2 rounded-full" style={{ background: a.channel === "google_ads" ? "var(--lv-google)" : "var(--lv-meta)" }} />
+                                {a.channel === "google_ads" ? "Google" : "Meta"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right tnum text-secondary">{m$(a.budget, a.currency)}</td>
+                            <td className="px-3 py-1.5 text-right tnum text-secondary">{m$(a.spend, a.currency)}</td>
+                            <td className={`px-3 py-1.5 text-right tnum ${av > 0 ? "text-danger" : "text-secondary"}`}>
+                              {av >= 0 ? "+" : "−"}{m$(Math.abs(av), a.currency)}
+                            </td>
+                            <td className="px-3 py-1.5 text-right tnum text-secondary">{formatPercent(ap)}</td>
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 function Row({ k, v, tone }: { k: string; v: string; tone?: string }) {

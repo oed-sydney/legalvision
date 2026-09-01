@@ -31,3 +31,10 @@ export function currentPeriod(now: Date = new Date()): Period {
     ym: `${y}-${mm}`,
   };
 }
+
+/** The previous complete calendar month (for retrospective pacing performance). */
+export function previousPeriod(now: Date = new Date()): Period {
+  const firstOfThisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const lastMonthAnchor = new Date(Date.UTC(firstOfThisMonth.getUTCFullYear(), firstOfThisMonth.getUTCMonth() - 1, 1));
+  return currentPeriod(lastMonthAnchor);
+}

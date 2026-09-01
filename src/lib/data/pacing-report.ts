@@ -8,7 +8,7 @@ import { nowDate, latestDataDay, dateRangeList } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { campaignMetas } from "./source";
 import { queryCampaignDaily } from "./warehouse";
-import { currentPeriod } from "./period";
+import { currentPeriod, previousPeriod } from "./period";
 import type { FilterState } from "../filters/schema";
 
 // Active pacing window = current calendar month; "today"/latest-complete-day are read
@@ -94,6 +94,80 @@ export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]
     });
   }
   return rows;
+}
+
+// ---- Last-month retrospective (final spend vs budget) -----------------------
+
+export interface LastMonthAccount {
+  accountId: string;
+  market: MarketCode;
+  channel: string;
+  accountName: string;
+  currency: CurrencyCode;
+  budget: number;
+  spend: number;
+}
+export interface LastMonthMarket {
+  market: MarketCode;
+  currency: CurrencyCode;
+  budget: number;
+  spend: number;
+  accounts: LastMonthAccount[];
+}
+export interface LastMonthPerformance {
+  label: string;
+  markets: LastMonthMarket[];
+  overall: { currency: CurrencyCode; estimated: boolean; budget: number; spend: number };
+}
+
+/**
+ * How last (complete) calendar month's actual spend landed against budget, per account +
+ * market. Compares against the CURRENT monthly budget (historical budgets aren't stored).
+ * Needs data covering last month — always true on a live 90-day pull.
+ */
+export async function lastMonthPerformance(f: FilterState): Promise<LastMonthPerformance> {
+  const amounts = await budgetAmounts();
+  const period = previousPeriod();
+
+  const accounts: LastMonthAccount[] = [];
+  for (const acct of AD_ACCOUNTS) {
+    if (f.country !== "all" && acct.market !== f.country) continue;
+    if (f.channel !== "all" && acct.channel !== f.channel) continue;
+    const rows = queryCampaignDaily({ from: period.start, to: period.end, accountId: acct.id });
+    const spend = rows.reduce((s, r) => s + r.spend, 0);
+    accounts.push({
+      accountId: acct.id,
+      market: acct.market,
+      channel: acct.channel,
+      accountName: `${acct.name} (${acct.channel === "google_ads" ? "Google" : "Meta"})`,
+      currency: acct.currency,
+      budget: amounts[acct.id] ?? 0,
+      spend,
+    });
+  }
+
+  const markets: LastMonthMarket[] = [];
+  for (const m of MARKETS) {
+    const accts = accounts.filter((a) => a.market === m.code);
+    if (accts.length === 0) continue;
+    markets.push({
+      market: m.code,
+      currency: m.currency,
+      budget: accts.reduce((s, a) => s + a.budget, 0),
+      spend: accts.reduce((s, a) => s + a.spend, 0),
+      accounts: accts,
+    });
+  }
+
+  const multi = new Set(markets.map((m) => m.currency)).size > 1;
+  const overallCurrency: CurrencyCode = multi ? REPORTING_CURRENCY : markets[0]?.currency ?? REPORTING_CURRENCY;
+  const budgetMoney: Money[] = markets.map((m) => ({ amount: m.budget, currency: m.currency }));
+  const spendMoney: Money[] = markets.map((m) => ({ amount: m.spend, currency: m.currency }));
+  const sumNative = (arr: Money[]) => arr.reduce((s, x) => s + x.amount, 0);
+  const budget = multi ? convertAndSum(budgetMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(budgetMoney);
+  const spend = multi ? convertAndSum(spendMoney, REPORTING_CURRENCY, fxTable).amount : sumNative(spendMoney);
+
+  return { label: period.label, markets, overall: { currency: overallCurrency, estimated: multi, budget, spend } };
 }
 
 export function pacingMarkets(rows: PacingAccountRow[]): MarketRollup[] {
