@@ -1,5 +1,5 @@
 import "server-only";
-import { fetchGoogleAuctionDaily, fetchGoogleDailyRange, windsorConfigured } from "../adapters/windsor-rest";
+import { fetchGoogleAuctionDaily, fetchGoogleCampaignLiveLeadsDaily, fetchGoogleDailyRange, windsorConfigured } from "../adapters/windsor-rest";
 import { kvGet, kvSet } from "../data/kv";
 import { NAME_TO_ACCT } from "../data/real/build";
 import { ACCOUNT_BY_ID } from "../domain/accounts";
@@ -22,6 +22,8 @@ interface MonthAgg {
   impressions: number;
   clicks: number;
   conversions: number;
+  /** Strict mapped Live Leads action (absent until the live-leads pull runs). */
+  liveLeads?: number;
   /** Weighted auction parts (search campaigns only; absent pre-auction-fetch). */
   eligImpr?: number;
   lostBudgetImpr?: number;
@@ -48,11 +50,12 @@ export async function refreshPlanCache(): Promise<{ months: number }> {
   const today = new Date().toISOString().slice(0, 10);
   const to = today < PLAN.endDate ? today : PLAN.endDate;
   const auctionExternalIds = AUCTION_ACCOUNT_IDS.map((id) => ACCOUNT_BY_ID[id].platformAccountId);
-  const [rows, auctionRows] = await Promise.all([
+  const [rows, auctionRows, liveLeadRows] = await Promise.all([
     fetchGoogleDailyRange(PLAN.startDate, to),
     auctionExternalIds.length
       ? fetchGoogleAuctionDaily(PLAN.startDate, to, auctionExternalIds)
       : Promise.resolve([]),
+    fetchGoogleCampaignLiveLeadsDaily("last_30d", PLAN.startDate, to),
   ]);
 
   const months: PlanCache["months"] = {};
@@ -66,6 +69,15 @@ export async function refreshPlanCache(): Promise<{ months: number }> {
     agg.impressions += Number(r.impressions) || 0;
     agg.clicks += Number(r.clicks) || 0;
     agg.conversions += Number(r.conversions) || 0;
+  }
+
+  // Strict Live Leads (mapped action) → per account/month, for cpll + live_leads KPIs.
+  for (const r of liveLeadRows) {
+    const acct = NAME_TO_ACCT[r.account_name];
+    if (!acct || !r.date) continue;
+    const byMonth = (months[acct] ??= {});
+    const agg = (byMonth[r.date.slice(0, 7)] ??= { spend: 0, impressions: 0, clicks: 0, conversions: 0 });
+    agg.liveLeads = (agg.liveLeads ?? 0) + (Number(r.conversions) || 0);
   }
 
   // Auction ratios only aggregate correctly via their denominators: eligible
@@ -163,10 +175,14 @@ function computeValue(def: PlanKpiDef, agg: MonthAgg | undefined): number | null
   switch (def.metric) {
     case "conversions":
       return agg.conversions;
+    case "live_leads":
+      return agg.liveLeads ?? null;
     case "spend":
       return agg.spend;
     case "cpa":
       return safeRatio(agg.spend, agg.conversions);
+    case "cpll":
+      return safeRatio(agg.spend, agg.liveLeads ?? 0);
     case "ctr": {
       const r = safeRatio(agg.clicks, agg.impressions);
       return r === null ? null : r * 100; // percent KPIs are in points

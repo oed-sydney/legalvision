@@ -1,32 +1,37 @@
 import type { CurrencyCode } from "../domain/types";
 
 /**
- * LegalVision 90-Day Paid Search Strategy (May – July 2026), transcribed from
- * "LV - 90 Day Strategy (May to July 26).pdf". Definitions are code-owned;
- * task statuses + manually-tracked KPI values persist to data/plan-state.json.
+ * LegalVision 90-Day Paid Search Strategy — Sprint Two (August – October 2026),
+ * transcribed from "LV - 90 Day Strategy (August to October 26).pptx" (revised
+ * objectives slide is authoritative). Definitions are code-owned; task statuses +
+ * manually-tracked KPI values persist to the plan store.
  *
- * NOTE on "live leads" here vs the rest of the app: the strategy's baseline
- * (1,785/mo) counts ALL AU conversion actions (Live Leads Enhanced + GA4 web /
- * phone leads + calls) — verified against May 2026 actuals (≈1,622). The plan
- * KPIs therefore use total platform conversions, unlike the dashboard's
- * stricter "Live Leads" metric (the mapped action only).
+ * "Live leads" here means the STRICT mapped Live Leads action (same basis as the rest
+ * of the dashboard) — Sprint Two's KPIs are stated on that basis, unlike Sprint One which
+ * counted all conversion actions. `cpll` = spend ÷ live leads and `live_leads` = the live
+ * leads count, both computed per account/month from the Live Leads feed. Volume targets
+ * are shown as a monthly figure (the sprint total ÷ 3) so the monthly engine can judge pace.
+ * Quality-score %, landing-page-experience % and spend-mix % aren't in the connector, so
+ * they're tracked manually (updated fortnightly / at WIP from the dashboard).
  */
 
 export const PLAN = {
-  name: "LegalVision 90-Day Paid Search Strategy",
-  startDate: "2026-05-01",
-  endDate: "2026-07-31",
+  name: "LegalVision 90-Day Paid Search Strategy — Sprint Two",
+  startDate: "2026-08-01",
+  endDate: "2026-10-31",
 } as const;
 
 export type PlanMarket = "AU" | "UK" | "NZ" | "TESTS";
 export type KpiUnit = "count" | "currency" | "percent";
 /**
- * Computed from monthly account aggregates (click_share / is_lost_budget are
- * weighted across SEARCH campaigns from daily auction rows), or manual.
+ * Computed from monthly account aggregates, or manual. `cpll`/`live_leads` read the strict
+ * Live Leads action; `click_share`/`is_lost_budget` are weighted across SEARCH campaigns.
  */
 export type KpiMetric =
   | "conversions"
+  | "live_leads"
   | "cpa"
+  | "cpll"
   | "spend"
   | "ctr"
   | "click_share"
@@ -58,280 +63,262 @@ export interface PlanTaskDef {
 }
 
 export const MARKET_SECTIONS: { market: PlanMarket; heading: string }[] = [
-  { market: "AU", heading: "Australia — Scale" },
-  { market: "UK", heading: "United Kingdom — Efficiency" },
-  { market: "NZ", heading: "New Zealand — Stabilise" },
-  { market: "TESTS", heading: "Testing plan" },
+  { market: "UK", heading: "United Kingdom — Primary focus" },
+  { market: "AU", heading: "Australia — Maintain & optimise" },
+  { market: "NZ", heading: "New Zealand — Cost efficiency" },
+  { market: "TESTS", heading: "Testing plan — Q3 2026" },
 ];
 
 export const PLAN_KPIS: PlanKpiDef[] = [
-  // ---- AU: scale ----
+  // ---- UK: primary focus (efficiency) ----
   {
-    id: "au-lead-volume",
-    market: "AU",
-    name: "Live lead volume / month",
-    description: "All lead conversion actions — the plan baseline's counting basis.",
+    id: "uk-cpll",
+    market: "UK",
+    name: "Cost per live lead",
+    description: "Spend ÷ live leads. Baseline £254 (sprint-one avg; July £249). Live-leads bidding is the new lever — target −10%.",
+    unit: "currency",
+    currency: "GBP",
+    direction: -1,
+    baseline: 254,
+    target: 229,
+    metric: "cpll",
+    accountId: "uk-google",
+  },
+  {
+    id: "uk-live-leads",
+    market: "UK",
+    name: "Live leads / month",
+    description: "Live-leads action. Hold sprint-one's level: sprint target ≥1,150 (≈383/mo); same period last year 1,066.",
     unit: "count",
     direction: 1,
-    baseline: 1785,
-    target: 2053,
-    metric: "conversions",
+    baseline: 355,
+    target: 383,
+    metric: "live_leads",
+    accountId: "uk-google",
+  },
+  {
+    id: "uk-low-qs",
+    market: "UK",
+    name: "Active keywords below QS 5",
+    description: "Share of active keywords below quality score 5 (52% at 17 Aug). Reviewed fortnightly in the Quality Score tab.",
+    unit: "percent",
+    direction: -1,
+    baseline: 52,
+    target: 40,
+    metric: "manual",
+  },
+  {
+    id: "uk-lp-experience",
+    market: "UK",
+    name: "Spend on weak landing pages",
+    description: "Share of spend on below-average landing page experience (baseline 29%, last 30 days). Stops keyword pausing doing the work alone.",
+    unit: "percent",
+    direction: -1,
+    baseline: 29,
+    target: 15,
+    metric: "manual",
+  },
+  // ---- AU: maintain & optimise ----
+  {
+    id: "au-live-leads",
+    market: "AU",
+    name: "Live leads / month",
+    description: "Live-leads action. Sprint target ~2,060 (+5%; ≈687/mo); last sprint 1,965; same period last year 1,688 (~+22% YoY).",
+    unit: "count",
+    direction: 1,
+    baseline: 655,
+    target: 687,
+    metric: "live_leads",
     accountId: "au-google",
   },
   {
     id: "au-cpll",
     market: "AU",
-    name: "Cost per live lead (CPLL)",
-    description: "Spend ÷ all lead conversions.",
+    name: "Cost per live lead",
+    description: "Spend ÷ live leads, held at July's level. Baselines: sprint one $316; July $294; Aug 1–16 running at $323.",
     unit: "currency",
     currency: "AUD",
     direction: -1,
-    baseline: 112,
-    target: 112,
-    metric: "cpa",
+    baseline: 316,
+    target: 295,
+    metric: "cpll",
     accountId: "au-google",
   },
   {
-    id: "au-click-share",
+    id: "au-low-qs",
     market: "AU",
-    name: "Click share",
-    description: "Search campaigns, weighted monthly (clicks ÷ eligible clicks).",
-    unit: "percent",
-    direction: 1,
-    baseline: 30,
-    target: 33,
-    metric: "click_share",
-    accountId: "au-google",
-  },
-  {
-    id: "au-is-lost-budget",
-    market: "AU",
-    name: "IS lost to budget",
-    description: "Search campaigns, weighted by eligible impressions.",
+    name: "Active keywords below QS 5",
+    description: "Share of active keywords below quality score 5 (57% at 17 Aug). Reviewed fortnightly in the Quality Score tab.",
     unit: "percent",
     direction: -1,
-    baseline: 23.5,
-    target: 18.8,
-    metric: "is_lost_budget",
-    accountId: "au-google",
-  },
-  // ---- UK: efficiency ----
-  {
-    id: "uk-spend",
-    market: "UK",
-    name: "Monthly spend",
-    description: "Cut spend while protecting lead volume.",
-    unit: "currency",
-    currency: "GBP",
-    direction: -1,
-    baseline: 80000,
-    target: 60000,
-    metric: "spend",
-    accountId: "uk-google",
-  },
-  {
-    id: "uk-lead-volume",
-    market: "UK",
-    name: "Lead volume / month",
-    description: "Platform-reported conversions; floor is −5% of baseline.",
-    unit: "count",
-    direction: 1,
-    baseline: 1200,
-    target: 1140,
-    metric: "conversions",
-    accountId: "uk-google",
-  },
-  {
-    id: "uk-cpa",
-    market: "UK",
-    name: "CPA on search",
-    description: "Spend ÷ conversions.",
-    unit: "currency",
-    currency: "GBP",
-    direction: -1,
-    baseline: 100,
-    target: 90,
-    metric: "cpa",
-    accountId: "uk-google",
-  },
-  // ---- NZ: stabilise ----
-  {
-    id: "nz-ctr",
-    market: "NZ",
-    name: "CTR on search",
-    description: "Clicks ÷ impressions.",
-    unit: "percent",
-    direction: 1,
-    baseline: 3.5,
-    target: 4.2,
-    metric: "ctr",
-    accountId: "nz-google",
-  },
-  {
-    id: "nz-low-qs",
-    market: "NZ",
-    name: "Keywords below QS 4",
-    description: "Count from the Google Ads keyword report (QS isn't in the connector's history).",
-    unit: "count",
-    direction: -1,
-    baseline: 103,
-    target: 82,
+    baseline: 57,
+    target: 45,
     metric: "manual",
   },
+  // ---- NZ: cost efficiency ----
   {
-    id: "nz-cpa",
+    id: "nz-cpll",
     market: "NZ",
-    name: "CPA on search",
-    description: "Spend ÷ conversions.",
+    name: "Cost per live lead",
+    description: "Spend ÷ live leads. Baselines: July $279; sprint-one avg $274. Target $250 (−10%).",
     unit: "currency",
     currency: "NZD",
     direction: -1,
-    baseline: 104,
-    target: 94,
-    metric: "cpa",
+    baseline: 274,
+    target: 250,
+    metric: "cpll",
     accountId: "nz-google",
+  },
+  {
+    id: "nz-spend-quality",
+    market: "NZ",
+    name: "Spend beating account-avg CPA",
+    description: "Share of spend in campaigns beating the account-average CPA (44% in July). Concentrate budget where commercial outcomes are strongest.",
+    unit: "percent",
+    direction: 1,
+    baseline: 44,
+    target: 55,
+    metric: "manual",
   },
 ];
 
 export const PLAN_TASKS: PlanTaskDef[] = [
-  // ---- AU workstreams ----
+  // ---- UK workstreams (primary focus) ----
   {
-    id: "au-keyword-efficiency",
-    market: "AU",
-    title: "Keyword efficiency — prune the keyword portfolio",
-    details:
-      "Pause high-spend terms below campaign avg. conv. rate\nFocus cuts on broad/phrase match in non-brand campaigns\nReallocate budget to exact match, high-intent queries",
-  },
-  {
-    id: "au-landing-experience",
-    market: "AU",
-    title: "Landing experience — act on MS Clarity data",
-    details:
-      "Review scroll depth on top 5 paid landing pages\nFlag pages where >40% drop before the CTA\nPrioritise headline and CTA placement fixes first",
-  },
-  {
-    id: "au-ad-copy",
-    market: "AU",
-    title: "Ad copy & creative — replace low-CTR RSA variants",
-    details:
-      "Retire headlines with <10% impression share + below-avg CTR\nLead with the problem, not the brand ('Need a Contract?')\nPin top variants on Trademarks to reduce weak combinations",
-  },
-  {
-    id: "au-asset-coverage",
-    market: "AU",
-    title: "Asset coverage — close ad group asset gaps",
-    details:
-      "4+ service-specific sitelinks per ad group (no generic links)\nMinimum 2 image assets per ad group\nStructured snippets matched to each legal vertical",
-  },
-  // ---- UK workstreams ----
-  {
-    id: "uk-spend-reduction",
+    id: "uk-live-leads-bidding",
     market: "UK",
-    title: "Spend reduction — cut inefficient segments (target £10k/mo)",
+    title: "Bidding — move UK campaigns to live-leads bidding",
     details:
-      "Negate terms with >£200 spend and 0 conversions (90 days)\nPause any ad group with <0.5% conv. rate\nReduce Contracts and Franchise daily budgets by 20–30%",
+      "Bid to live leads only, not all conversions\nBAU optimisation: shift budget from traffic that doesn't convert to the segments that do\nStart with Business, where most spend sits",
   },
   {
-    id: "uk-volume-protection",
+    id: "uk-quality-score",
     market: "UK",
-    title: "Volume protection — re-weight budget toward proven converters",
+    title: "Quality Score — lift every keyword above 5",
     details:
-      "Reallocate cuts to Business and high-converter campaigns\nIncrease coverage on terms already converting at target CPLL\nReview lead volume weekly — hold adjustments for 4 weeks",
+      "Dashboard flags anything under QS 5, reviewed fortnightly\nStart with the Business keywords (most of the spend)\nWork the components in order: ad relevance → expected CTR → landing page",
   },
   {
-    id: "uk-account-hygiene",
+    id: "uk-tcpa",
     market: "UK",
-    title: "Account hygiene — remove duplicate keywords",
+    title: "tCPA change (17 Aug) — small UK exposure, tidied early",
     details:
-      "Identify keywords active in more than one campaign\nPause in the lower QS / lower conv. rate campaign\nPrioritise Business and high converters — highest CPC impact",
+      "Two campaigns affected; targets updated before the change lands\nOpen question with Google on exactly which campaigns qualify",
   },
   {
-    id: "uk-ad-copy",
+    id: "uk-google-growth-plan",
     market: "UK",
-    title: "Ad copy — refresh creative on priority campaigns",
+    title: "Google growth plan — use what's useful",
     details:
-      "Problem-led headlines on Business and Employment\nPin top RSA variants on Trademarks and Legal Docs\nRetire any headline with below-avg CTR for 30+ days",
+      "Review Google's UK plan for ideas that fit the cost goal\nFix conversion double-counting before any further bidding changes",
   },
-  // ---- NZ workstreams ----
+  // ---- AU workstreams (maintain & optimise) ----
   {
-    id: "nz-qs-framework",
+    id: "au-tcpa",
+    market: "AU",
+    title: "tCPA change (17 Aug) — the main job this month",
+    details:
+      "Most AU campaigns are limited by budget, so targets are updated before the change\nDaily checks for the first week, then the dashboard takes over",
+  },
+  {
+    id: "au-aimax-retest",
+    market: "AU",
+    title: "AI Max retest — second try, tighter setup",
+    details:
+      "Small experiment split on one campaign (High Converters)\nImmigration pages, brand and competitor terms excluded this time\nLead quality checked weekly",
+  },
+  {
+    id: "au-quality-score",
+    market: "AU",
+    title: "Quality Score — set the baseline",
+    details:
+      "Account-average quality score baselined and tracked in the dashboard\nImprovement targets set once the baseline is in",
+  },
+  {
+    id: "au-keep-what-worked",
+    market: "AU",
+    title: "Keep what worked — same routine as sprint one",
+    details:
+      "Keyword, ad copy and asset work continues on the same rhythm\nLead quality stays on watch with the sales team",
+  },
+  // ---- NZ workstreams (cost efficiency) ----
+  {
+    id: "nz-budget-mix",
     market: "NZ",
-    title: "QS improvement framework — fix in order",
+    title: "Budget mix — fund the best campaigns",
     details:
-      "1. Ad relevance: move keywords into tighter ad groups so copy matches query intent\n2. Expected CTR: pause low-CTR headlines; replace using actual search-term language\n3. Landing page experience: send keywords to the most relevant service page",
+      "Budget moves to the campaigns with the best cost per live lead\nLess spend where leads skew to form fills",
   },
   {
-    id: "nz-budget-allocation",
+    id: "nz-quality-score",
     market: "NZ",
-    title: "Budget allocation — shift spend to live lead drivers",
+    title: "Quality Score — finish the job",
     details:
-      "Increase budget on the 2–3 campaigns with best CPLL\nReduce spend where conversions are soft leads or form fills\nGoal is a better quality mix, not just lower volume",
+      "Low quality score keywords down from 91 to the low 80s\nSame fix order as sprint one",
   },
   {
-    id: "nz-asset-performance",
+    id: "nz-ctr",
     market: "NZ",
-    title: "Asset performance — audit and refresh",
+    title: "Click-through rate — keep the win",
     details:
-      "Pause headlines rated 'Low' or >30% below avg CTR\nReplace using language from top-performing search terms\nSwap generic sitelinks for service-specific ones",
+      "Hold at 4.2% or better\nAd refresh routine continues",
   },
-  // ---- Testing plan ----
+  // ---- Testing plan (Q3 2026) ----
   {
-    id: "test-live-leads-bidding",
+    id: "test-au-aimax",
     market: "TESTS",
-    title: "Test: Live-leads-only bidding (AU + UK) — target −15% CPLL",
+    title: "AI Max retest (AU) — High Converters campaign",
     details:
-      "Business & Contracts campaigns\nHypothesis: removing soft-lead signals from Smart Bidding concentrates spend on qualified live-lead queries\nSetup: duplicate conversion action scoped to live leads only; apply to Business and Contracts; min. 6-week run before evaluating",
-  },
-  {
-    id: "test-tcpa-cpc-cap",
-    market: "TESTS",
-    title: "Test: tCPA + max CPC cap (UK) — reduce CPA on higher-funnel terms",
-    details:
-      "Hypothesis: a CPC ceiling on top of tCPA prevents runaway auction costs while keeping conversion optimisation intact\nSetup: max CPC at 1.5× current avg CPC per term; review IS and conv. rate weekly for 4 weeks",
+      "Success: extra conversions at or under campaign CPA\nThinking: with the right exclusions, AI Max can find extra demand without July's poor-quality leads\nRuns: small experiment split with page + brand exclusions; lead quality checked weekly; decision after 4–6 weeks",
   },
   {
-    id: "test-rsa-pinning",
+    id: "test-tcpa-transition",
     market: "TESTS",
-    title: "Test: RSA headline pinning (AU + UK) — target +10% click share",
+    title: "tCPA transition (all markets) — budget-limited campaigns",
     details:
-      "Trademarks & Legal Docs campaigns\nHypothesis: pinning top variants stops Google serving weak headline combinations\nSetup: pin P1 brand/service, P2 value prop, P3 dynamic; evaluate after 30 days vs control",
+      "Success: CPA steady through the 17 Aug change\nThinking: updating targets before the change stops Google inflating CPAs on budget-limited campaigns\nRuns: targets updated in the days before; daily checks the first week, then dashboard alerts",
+  },
+  {
+    id: "test-uk-segment-narrowing",
+    market: "TESTS",
+    title: "Segment narrowing (UK) — low-quality traffic segments",
+    details:
+      "Success: cost per lead down without losing volume\nThinking: moving spend out of segments that don't convert and into ones that do brings cost per lead down\nRuns: segments ranked by cost per lead; bottom tier cut, budget reallocated; reviewed weekly",
   },
 ];
 
 /** Standing reporting commitments — statements of cadence, not trackable tasks. */
 export const REPORTING_CADENCE: { id: string; title: string; cadence: string; details: string }[] = [
   {
-    id: "rep-keyword-review",
-    title: "Keyword performance report review",
-    cadence: "Every Monday",
+    id: "rep-live-tracking",
+    title: "Sprint goals tracked live in the dashboard",
+    cadence: "Live",
     details:
-      "Top wasted-spend terms, keyword QS changes, new search-term opportunities, impression share movement, anomalies vs prior week — delivered via ClickUp with Claude-generated summary",
+      "KPIs load at go-live and update in real time (no manual pushes); alerts limited to sprint KPIs + budget pacing so every alert matters; go-live on the One Egg domain before the next WIP, with logins for both teams; the CRM lead-quality feed is parked until end of sprint",
   },
   {
-    id: "rep-meeting-prep",
-    title: "Client meeting prep + AI notes auto-send",
+    id: "rep-weekly-wip",
+    title: "Weekly WIP with pre-filled agenda",
     cadence: "Weekly",
-    details: "",
+    details: "Agenda pre-filled and meeting notes saved automatically",
   },
   {
-    id: "rep-customer-lists",
-    title: "Customer list upload — converted leads",
-    cadence: "1st of month",
-    details: "",
+    id: "rep-budget-updates",
+    title: "Budget updates on demand",
+    cadence: "On demand",
+    details: "Available any time, with a projected end-of-week position",
   },
   {
     id: "rep-bidding-review",
-    title: "Monthly bidding performance review",
-    cadence: "End of month",
-    details:
-      "Smart Bidding target vs actual, bid modifier analysis by device/location/audience, budget pacing and allocation efficiency, recommended adjustments",
+    title: "Monthly bidding review against targets",
+    cadence: "Monthly",
+    details: "Smart Bidding target vs actual and recommended adjustments",
   },
   {
-    id: "rep-asset-audit",
-    title: "Ad copy & asset audit across all accounts",
-    cadence: "Quarterly",
-    details:
-      "Full RSA headline and description analysis; low performers, creative fatigue signals, recommended replacements",
+    id: "rep-sprint-review",
+    title: "Full sprint review",
+    cadence: "End of October",
+    details: "Sprint-two outcomes vs KPIs; set sprint three",
   },
 ];
 

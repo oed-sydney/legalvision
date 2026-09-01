@@ -26,6 +26,12 @@ import { readMeetingsSnapshot } from "@/lib/plan/meetings";
 import { formatInt, formatMoney } from "@/lib/metrics/format";
 import { cn } from "@/lib/utils";
 
+function planDateRange(): string {
+  const fmt = (iso: string) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${fmt(PLAN.startDate)} – ${fmt(PLAN.endDate)} ${PLAN.endDate.slice(0, 4)}`;
+}
+
 export default async function PlanPage() {
   const report = await planReport();
   const state = await readPlanState();
@@ -42,7 +48,7 @@ export default async function PlanPage() {
     <div>
       <PageHeader
         title="90-Day Plan"
-        subtitle={`${PLAN.name} · 1 May – 31 Jul 2026`}
+        subtitle={`${PLAN.name} · ${planDateRange()}`}
       />
 
       {/* Plan progress hero */}
