@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2, Send } from "lucide-react";
+import { Check, Loader2, Plus, Send, X } from "lucide-react";
 import { saveAlertConfig, sendTestAlertAction } from "@/app/(dashboard)/admin/actions";
 import type { AlertConfig } from "@/lib/alerts/config";
 
@@ -17,6 +17,11 @@ export function AlertsEditor({ initial, emailReady }: { initial: AlertConfig; em
   const [testing, startTest] = useTransition();
 
   const set = <K extends keyof AlertConfig>(k: K, v: AlertConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
+
+  const addCheckpoint = () => set("checkpoints", [...cfg.checkpoints, { day: 25, minSpendPct: 80 }]);
+  const removeCheckpoint = (i: number) => set("checkpoints", cfg.checkpoints.filter((_, x) => x !== i));
+  const updateCheckpoint = (i: number, field: "day" | "minSpendPct", val: number) =>
+    set("checkpoints", cfg.checkpoints.map((c, x) => (x === i ? { ...c, [field]: val } : c)));
 
   const parseRecipients = (s: string) =>
     Array.from(new Set(s.split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /.+@.+\..+/.test(x))));
@@ -94,6 +99,35 @@ export function AlertsEditor({ initial, emailReady }: { initial: AlertConfig; em
           </div>
           <div className="mt-1 text-[11px] text-muted">Alert when a market is tracking well under budget.</div>
         </div>
+      </div>
+
+      <div>
+        <div className="mb-1 font-medium text-ink">Spend-to-date checkpoints</div>
+        <div className="mb-2 text-[11px] text-muted">
+          Flag a market that hasn&apos;t spent enough of its budget by a given day of the month (catches under-pacing early).
+        </div>
+        <div className="space-y-2">
+          {cfg.checkpoints.map((c, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="text-secondary">By day</span>
+              <input type="number" min={1} max={31} value={c.day}
+                onChange={(e) => updateCheckpoint(i, "day", Number(e.target.value))}
+                className="w-14 rounded-md border border-[var(--lv-border)] bg-card px-2 py-1 text-right tnum outline-none focus:border-[var(--lv-accent)]" />
+              <span className="text-secondary">of the month, spend should be ≥</span>
+              <input type="number" min={0} max={200} value={c.minSpendPct}
+                onChange={(e) => updateCheckpoint(i, "minSpendPct", Number(e.target.value))}
+                className="w-14 rounded-md border border-[var(--lv-border)] bg-card px-2 py-1 text-right tnum outline-none focus:border-[var(--lv-accent)]" />
+              <span className="text-secondary">% of budget</span>
+              <button type="button" onClick={() => removeCheckpoint(i)} aria-label="Remove checkpoint" className="text-muted hover:text-danger">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {cfg.checkpoints.length === 0 && <div className="text-[12px] text-muted">No checkpoints — add one below.</div>}
+        </div>
+        <button type="button" onClick={addCheckpoint} className="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2.5 py-1 text-[12px] font-medium text-secondary hover:bg-canvas">
+          <Plus className="h-3.5 w-3.5" /> Add checkpoint
+        </button>
       </div>
 
       <label className="flex items-center gap-2.5">

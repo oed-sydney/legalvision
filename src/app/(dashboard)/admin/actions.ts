@@ -33,6 +33,9 @@ const alertSchema = z.object({
   recipients: z.array(z.string().email()).max(25),
   overspendPct: z.number().min(50).max(300),
   underspendPct: z.number().min(0).max(150),
+  checkpoints: z
+    .array(z.object({ day: z.number().int().min(1).max(31), minSpendPct: z.number().min(0).max(200) }))
+    .max(10),
   triggerAlerts: z.boolean(),
   weeklyDigest: z.boolean(),
   weeklyDay: z.number().int().min(0).max(6),
