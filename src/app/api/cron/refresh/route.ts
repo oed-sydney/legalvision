@@ -6,6 +6,7 @@ import { refreshTermsCache } from "@/lib/data/live-terms";
 import { refreshBudgetLost } from "@/lib/data/budget-lost";
 import { refreshPlanCache } from "@/lib/plan/metrics";
 import { writeSyncState } from "@/lib/data/sync-state";
+import { runBudgetAlerts } from "@/lib/alerts/run";
 
 // The live pull + terms + plan can take ~40s; allow headroom.
 export const maxDuration = 60;
@@ -42,6 +43,10 @@ export async function GET(request: Request) {
     } catch {}
     try {
       await refreshPlanCache();
+    } catch {}
+    // Budget-pacing email alerts — evaluated after data is fresh (no-op unless configured).
+    try {
+      await runBudgetAlerts();
     } catch {}
     await writeSyncState({
       lastSyncedAt: now,

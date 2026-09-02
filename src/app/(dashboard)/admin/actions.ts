@@ -7,6 +7,8 @@ import { setBudget } from "@/lib/data/budgets-store";
 import { ACCOUNT_BY_ID } from "@/lib/domain/accounts";
 import { getSessionProfile } from "@/lib/auth/session";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { setAlertConfig, type AlertConfig } from "@/lib/alerts/config";
+import { sendTestAlert } from "@/lib/alerts/run";
 
 const schema = z.object({
   accountId: z.string(),
@@ -24,6 +26,34 @@ export async function saveBudget(input: { accountId: string; amount: number }) {
   revalidatePath("/pacing");
   revalidatePath("/overview");
   return { ok: true };
+}
+
+const alertSchema = z.object({
+  enabled: z.boolean(),
+  recipients: z.array(z.string().email()).max(25),
+  overspendPct: z.number().min(50).max(300),
+  underspendPct: z.number().min(0).max(150),
+  triggerAlerts: z.boolean(),
+  weeklyDigest: z.boolean(),
+  weeklyDay: z.number().int().min(0).max(6),
+});
+
+/** Save the budget-pacing email alert config (Admin → Alerts). Admin only. */
+export async function saveAlertConfig(input: AlertConfig) {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
+  const parsed = alertSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: "Check the thresholds and recipient emails." };
+  await setAlertConfig(parsed.data);
+  revalidatePath("/admin");
+  return { ok: true as const };
+}
+
+/** Send a one-off test alert email to the configured recipients. Admin only. */
+export async function sendTestAlertAction() {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
+  return sendTestAlert();
 }
 
 const inviteSchema = z.object({

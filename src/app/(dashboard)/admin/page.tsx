@@ -8,7 +8,10 @@ import { targets } from "@/lib/data/mock";
 import { allBudgets as budgets } from "@/lib/data/budgets-store";
 import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { BudgetEditor } from "@/components/admin/BudgetEditor";
+import { AlertsEditor } from "@/components/admin/AlertsEditor";
 import { InviteUserForm } from "@/components/admin/InviteUserForm";
+import { getAlertConfig } from "@/lib/alerts/config";
+import { emailConfigured } from "@/lib/alerts/email";
 import { getSessionProfile } from "@/lib/auth/session";
 import { listAppUsers } from "@/lib/auth/users";
 import { currentPeriod } from "@/lib/data/period";
@@ -24,6 +27,7 @@ export default async function AdminPage() {
   const targetRows = targets();
   const userRows = await listAppUsers();
   const runs = syncRuns();
+  const alertConfig = await getAlertConfig();
 
   return (
     <div>
@@ -97,6 +101,18 @@ export default async function AdminPage() {
                   ])}
                 />
                 <p className="mt-3 text-[11px] text-muted">Unset targets render &quot;No target&quot; on pills rather than fabricated defaults.</p>
+              </Card>
+            ),
+          },
+          {
+            key: "alerts",
+            label: "Alerts",
+            panel: (
+              <Card>
+                <CardTitle action={<span className="text-[12px] text-muted">Budget pacing · emailed on trigger + weekly digest</span>}>
+                  Email alerts
+                </CardTitle>
+                <AlertsEditor initial={alertConfig} emailReady={emailConfigured()} />
               </Card>
             ),
           },
