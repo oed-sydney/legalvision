@@ -9,6 +9,7 @@ import { parseFilters, type FilterState } from "@/lib/filters/schema";
 import { hydrateLiveData } from "@/lib/data/source";
 import { scopedKeywords, qsSummary, qsHighSpendLow, qsNoScoreWithSpend } from "@/lib/data/quality";
 import { keywordSegments } from "@/lib/data/keyword-segments";
+import { getHiddenKeywords } from "@/lib/data/hidden-keywords";
 import { KeywordSegmentsPanel } from "@/components/panels/KeywordSegmentsPanel";
 import { termsCache } from "@/lib/data/live-terms";
 import { qsImpact } from "@/lib/data/real/qs-impact";
@@ -44,6 +45,7 @@ export default async function QualityScorePage({
   const marketLabel = MARKET_LABEL[f.country] ?? "All markets";
 
   const segments = keywordSegments(kws);
+  const hiddenKeys = await getHiddenKeywords();
 
   const keywordRows: KeywordRow[] = [...kws]
     .sort((a, b) => b.spend - a.spend)
@@ -125,7 +127,7 @@ export default async function QualityScorePage({
                   <CardTitle action={<span className="text-[12px] text-muted">Action lists · last 30 days · native currency</span>}>
                     Keyword segments
                   </CardTitle>
-                  <KeywordSegmentsPanel poor={segments.poor} highCpc={segments.highCpc} lowIs={segments.lowIs} />
+                  <KeywordSegmentsPanel poor={segments.poor} highCpc={segments.highCpc} lowIs={segments.lowIs} hiddenKeys={hiddenKeys} />
                 </Card>
                 <Card>
                   <CardTitle action={<span className="text-[12px] text-muted">Top {keywordRows.length} by spend</span>}>

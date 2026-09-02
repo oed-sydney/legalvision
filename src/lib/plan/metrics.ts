@@ -5,7 +5,12 @@ import { NAME_TO_ACCT } from "../data/real/build";
 import { ACCOUNT_BY_ID } from "../domain/accounts";
 import { PLAN, PLAN_KPIS, type PlanKpiDef } from "./definition";
 import { readPlanState } from "./store";
+import { planSnapshots } from "./snapshots";
 import { safeRatio } from "../metrics/format";
+import type { MarketCode } from "../domain/types";
+
+/** Metrics computed as a current-state snapshot (keyword / campaign detail), not monthly. */
+const SNAPSHOT_METRICS = new Set(["kw_below_qs5", "spend_weak_lp", "spend_beat_cpll"]);
 
 /**
  * Monthly KPI values for the 90-day plan, computed from account-level Windsor
@@ -200,21 +205,12 @@ function computeValue(def: PlanKpiDef, agg: MonthAgg | undefined): number | null
   }
 }
 
-/** Judge on the last COMPLETE month (a partial month can't fail a monthly target). */
-function judge(
+/** Judge a single value against the target (shared by monthly + snapshot KPIs). */
+function judgeValue(
   def: PlanKpiDef,
-  months: PlanMonth[],
-  values: (number | null)[]
+  latest: number | null,
+  judgedLabel: string
 ): { status: KpiStatus; gapText: string | null } {
-  let latest: number | null = null;
-  let judgedLabel = "";
-  for (let i = months.length - 1; i >= 0; i--) {
-    if (!months[i].partial && values[i] !== null) {
-      latest = values[i];
-      judgedLabel = months[i].label;
-      break;
-    }
-  }
   if (latest === null) return { status: "no_data", gapText: null };
 
   const pct = Math.abs((latest - def.target) / Math.abs(def.target)) * 100;
@@ -234,12 +230,39 @@ function judge(
   return { status, gapText };
 }
 
+/** Judge on the last COMPLETE month (a partial month can't fail a monthly target). */
+function judge(
+  def: PlanKpiDef,
+  months: PlanMonth[],
+  values: (number | null)[]
+): { status: KpiStatus; gapText: string | null } {
+  for (let i = months.length - 1; i >= 0; i--) {
+    if (!months[i].partial && values[i] !== null) {
+      return judgeValue(def, values[i], months[i].label);
+    }
+  }
+  return { status: "no_data", gapText: null };
+}
+
 export async function planReport(now = new Date()): Promise<PlanReport> {
   const months = planMonths(now);
   const cache = await cachedMonths();
   const state = await readPlanState();
+  const snapshots = await planSnapshots();
 
   const kpis: KpiRow[] = PLAN_KPIS.map((def) => {
+    // Current-state snapshots: single value shown in the latest column, judged directly.
+    if (SNAPSHOT_METRICS.has(def.metric)) {
+      const ms = snapshots[def.market as MarketCode];
+      const cur =
+        !ms ? null
+        : def.metric === "kw_below_qs5" ? ms.kwBelowQs5
+        : def.metric === "spend_weak_lp" ? ms.spendWeakLp
+        : ms.spendBeatCpll;
+      const values = months.map((_, i) => (i === months.length - 1 ? cur : null));
+      const { status, gapText } = judgeValue(def, cur, "current");
+      return { def, values, status, gapText };
+    }
     const values = months.map((m) => {
       if (def.metric === "manual") return state.manualValues[def.id]?.[m.month] ?? null;
       const agg = def.accountId ? cache?.months[def.accountId]?.[m.month] : undefined;

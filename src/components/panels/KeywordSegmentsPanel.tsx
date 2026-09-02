@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ExternalLink, EyeOff, RotateCcw } from "lucide-react";
 import { DataTable, type ColMeta } from "@/components/ui/DataTable";
@@ -14,8 +14,6 @@ import {
 } from "@/lib/data/keyword-segments";
 
 type SegKey = "poor" | "highCpc" | "lowIs";
-
-const HIDDEN_KEY = "lv-kw-hidden"; // per-user hidden keyword ids (actioned rows)
 
 /** Colour token per match type so exact / phrase / broad read at a glance. */
 const MATCH_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
@@ -125,7 +123,7 @@ function actionsCol(onHide: (id: string) => void): ColumnDef<SegmentRow, unknown
             aria-label={`Hide ${r.text}`}
             onClick={(e) => {
               e.stopPropagation();
-              onHide(r.id);
+              onHide(r.stableKey);
             }}
             className="inline-flex items-center gap-1 rounded-md border border-[var(--lv-border)] px-2 py-1 text-[11px] font-medium text-secondary hover:bg-canvas hover:text-ink"
           >
@@ -201,51 +199,43 @@ export function KeywordSegmentsPanel({
   poor,
   highCpc,
   lowIs,
+  hiddenKeys,
 }: {
   poor: SegmentRow[];
   highCpc: SegmentRow[];
   lowIs: SegmentRow[];
+  /** Shared hidden-keyword keys from the server (Postgres) — actioned rows, all users. */
+  hiddenKeys: string[];
 }) {
   const [seg, setSeg] = useState<SegKey>("poor");
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set(hiddenKeys));
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(HIDDEN_KEY);
-      if (raw) setHidden(new Set(JSON.parse(raw) as string[]));
-    } catch {}
-  }, []);
+  // Persist to the shared server list (best-effort; UI already updated optimistically).
+  const post = (body: Record<string, unknown>) =>
+    fetch("/api/keywords/hide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
 
-  const persist = (s: Set<string>) => {
-    try {
-      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s]));
-    } catch {}
-  };
-
-  const hide = useCallback((id: string) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      persist(next);
-      return next;
-    });
+  const hide = useCallback((key: string) => {
+    setHidden((prev) => new Set(prev).add(key));
+    post({ key, hidden: true });
   }, []);
 
   const restoreAll = () => {
-    setHidden(() => {
-      persist(new Set());
-      return new Set();
-    });
+    setHidden(new Set());
+    post({ clearAll: true });
   };
 
-  const visible = useCallback((rows: SegmentRow[]) => rows.filter((r) => !hidden.has(r.id)), [hidden]);
+  const visible = useCallback((rows: SegmentRow[]) => rows.filter((r) => !hidden.has(r.stableKey)), [hidden]);
   const poorV = visible(poor);
   const highV = visible(highCpc);
   const lowV = visible(lowIs);
 
   // How many rows currently in scope are hidden (for the restore affordance).
-  const inScopeIds = useMemo(() => new Set([...poor, ...highCpc, ...lowIs].map((r) => r.id)), [poor, highCpc, lowIs]);
-  const hiddenInScope = [...hidden].filter((id) => inScopeIds.has(id)).length;
+  const inScopeKeys = useMemo(() => new Set([...poor, ...highCpc, ...lowIs].map((r) => r.stableKey)), [poor, highCpc, lowIs]);
+  const hiddenInScope = [...hidden].filter((k) => inScopeKeys.has(k)).length;
 
   const tabs: { key: SegKey; label: string; count: number; blurb: string }[] = [
     {

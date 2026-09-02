@@ -11,8 +11,8 @@ import type { CurrencyCode } from "../domain/types";
  * counted all conversion actions. `cpll` = spend ÷ live leads and `live_leads` = the live
  * leads count, both computed per account/month from the Live Leads feed. Volume targets
  * are shown as a monthly figure (the sprint total ÷ 3) so the monthly engine can judge pace.
- * Quality-score %, landing-page-experience % and spend-mix % aren't in the connector, so
- * they're tracked manually (updated fortnightly / at WIP from the dashboard).
+ * Quality-score %, landing-page-experience % and spend-mix % are current-state snapshots
+ * computed from the keyword / campaign detail (see snapshots.ts) — no manual entry needed.
  */
 
 export const PLAN = {
@@ -36,6 +36,10 @@ export type KpiMetric =
   | "ctr"
   | "click_share"
   | "is_lost_budget"
+  // Current-state snapshots computed from keyword / campaign detail (see snapshots.ts):
+  | "kw_below_qs5"
+  | "spend_weak_lp"
+  | "spend_beat_cpll"
   | "manual";
 
 export interface PlanKpiDef {
@@ -100,23 +104,25 @@ export const PLAN_KPIS: PlanKpiDef[] = [
     id: "uk-low-qs",
     market: "UK",
     name: "Active keywords below QS 5",
-    description: "Share of active keywords below quality score 5 (52% at 17 Aug). Reviewed fortnightly in the Quality Score tab.",
+    description: "Share of active, scored keywords below quality score 5 (52% at 17 Aug). Computed live from the keyword pull.",
     unit: "percent",
     direction: -1,
     baseline: 52,
     target: 40,
-    metric: "manual",
+    metric: "kw_below_qs5",
+    accountId: "uk-google",
   },
   {
     id: "uk-lp-experience",
     market: "UK",
     name: "Spend on weak landing pages",
-    description: "Share of spend on below-average landing page experience (baseline 29%, last 30 days). Stops keyword pausing doing the work alone.",
+    description: "Share of keyword spend on below-average landing page experience (baseline 29%). Computed live from the keyword pull.",
     unit: "percent",
     direction: -1,
     baseline: 29,
     target: 15,
-    metric: "manual",
+    metric: "spend_weak_lp",
+    accountId: "uk-google",
   },
   // ---- AU: maintain & optimise ----
   {
@@ -148,12 +154,13 @@ export const PLAN_KPIS: PlanKpiDef[] = [
     id: "au-low-qs",
     market: "AU",
     name: "Active keywords below QS 5",
-    description: "Share of active keywords below quality score 5 (57% at 17 Aug). Reviewed fortnightly in the Quality Score tab.",
+    description: "Share of active, scored keywords below quality score 5 (57% at 17 Aug). Computed live from the keyword pull.",
     unit: "percent",
     direction: -1,
     baseline: 57,
     target: 45,
-    metric: "manual",
+    metric: "kw_below_qs5",
+    accountId: "au-google",
   },
   // ---- NZ: cost efficiency ----
   {
@@ -172,13 +179,14 @@ export const PLAN_KPIS: PlanKpiDef[] = [
   {
     id: "nz-spend-quality",
     market: "NZ",
-    name: "Spend beating account-avg CPA",
-    description: "Share of spend in campaigns beating the account-average CPA (44% in July). Concentrate budget where commercial outcomes are strongest.",
+    name: "Spend beating account-avg CPLL",
+    description: "Share of spend in campaigns beating the account-average cost per live lead (44% in July). Computed live from campaign spend + live leads.",
     unit: "percent",
     direction: 1,
     baseline: 44,
     target: 55,
-    metric: "manual",
+    metric: "spend_beat_cpll",
+    accountId: "nz-google",
   },
 ];
 

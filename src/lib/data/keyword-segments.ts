@@ -2,6 +2,15 @@ import type { CurrencyCode, Keyword } from "../domain/types";
 import { tcpaTargets } from "./real/tcpa";
 import { AD_ACCOUNTS } from "../domain/accounts";
 
+/**
+ * Stable keyword identity across data pulls (the row `id` is index-based and reshuffles).
+ * Mirrors stableKwKey in qs-snapshot.ts — inlined here so this module stays client-safe
+ * (it's imported by the KeywordSegmentsPanel client component).
+ */
+function stableKwKey(k: { accountId: string; campaignName: string; adGroupName: string; text: string; matchType: string }): string {
+  return [k.accountId, k.campaignName, k.adGroupName, k.text, k.matchType].join("::").toLowerCase();
+}
+
 /** Google Ads customer id (digits only) per internal account id, for deep links. */
 const GOOGLE_CID: Record<string, string> = Object.fromEntries(
   AD_ACCOUNTS.filter((a) => a.channel === "google_ads").map((a) => [a.id, a.platformAccountId.replace(/\D/g, "")])
@@ -41,6 +50,8 @@ export const LOW_IS_CPA_TOLERANCE = 0.1; // cost/conv at or within +10% of targe
 
 export interface SegmentRow {
   id: string;
+  /** Stable across data pulls (id is index-based) — used for the shared hide list. */
+  stableKey: string;
   text: string;
   matchType: string;
   campaignName: string;
@@ -92,6 +103,7 @@ export function keywordSegments(kws: Keyword[]): KeywordSegments {
     const target = targets.get(`${k.market}|${k.campaignName}`)?.targetCpa ?? null;
     return {
       id: k.id,
+      stableKey: stableKwKey(k),
       text: k.text,
       matchType: k.matchType,
       campaignName: k.campaignName,
