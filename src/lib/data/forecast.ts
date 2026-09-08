@@ -6,6 +6,7 @@ import { nowDate, latestDataDay } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { queryCampaignDaily } from "./warehouse";
 import { currentPeriod } from "./period";
+import { trailing7 } from "./pacing-report";
 import type { FilterState } from "../filters/schema";
 
 /**
@@ -38,6 +39,8 @@ export async function googleMonthEndForecast(f: FilterState): Promise<MarketFore
 
     const rows = queryCampaignDaily({ from: period.start, to: lcd, accountId: acct.id });
     const mtdSpend = rows.reduce((s, r) => s + r.spend, 0);
+    const byDay = new Map<string, number>();
+    for (const r of rows) byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.spend);
     const budget = amounts[acct.id] ?? 0;
     const pac = computePacing({
       periodStart: period.start,
@@ -46,6 +49,7 @@ export async function googleMonthEndForecast(f: FilterState): Promise<MarketFore
       spend: mtdSpend,
       now,
       timezone: acct.reportingTimezone,
+      trailingAvg7: trailing7(byDay, lcd, period.start),
     });
     const projected = pac.projectedSpend ?? mtdSpend;
     out.push({

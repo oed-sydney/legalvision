@@ -8,6 +8,7 @@ import { nowDate, latestDataDay } from "./mock";
 import { budgetAmounts } from "./budgets-store";
 import { computeTotals, queryCampaignDaily, type Totals } from "./warehouse";
 import { currentPeriod } from "./period";
+import { trailing7 } from "./pacing-report";
 import type { FilterState } from "../filters/schema";
 
 /** Per-(market) and per-(channel) totals for Overview splits + comparison tables. */
@@ -94,6 +95,7 @@ export async function marketPacing(f: FilterState): Promise<{
     let budget = 0;
     let spend = 0;
     let projected = 0;
+    let marketTrailing = 0;
     for (const acct of accts) {
       const acctBudget = amounts[acct.id] ?? null;
       const rows = queryCampaignDaily({
@@ -102,6 +104,9 @@ export async function marketPacing(f: FilterState): Promise<{
         accountId: acct.id,
       });
       const acctSpend = rows.reduce((s, r) => s + r.spend, 0);
+      const byDay = new Map<string, number>();
+      for (const r of rows) byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.spend);
+      const acctTrailing = trailing7(byDay, lcd, period.start);
       const pac = computePacing({
         periodStart: period.start,
         periodEnd: period.end,
@@ -109,9 +114,11 @@ export async function marketPacing(f: FilterState): Promise<{
         spend: acctSpend,
         now,
         timezone: acct.reportingTimezone,
+        trailingAvg7: acctTrailing,
       });
       budget += acctBudget ?? 0;
       spend += acctSpend;
+      marketTrailing += acctTrailing;
       projected += pac.projectedSpend ?? acctSpend;
     }
     // market-level pacing recomputed on market totals (single currency — exact)
@@ -122,6 +129,7 @@ export async function marketPacing(f: FilterState): Promise<{
       spend,
       now,
       timezone: MARKETS.find((x) => x.code === m.code)!.displayTimezone,
+      trailingAvg7: marketTrailing,
     });
     markets.push({ market: m.code, currency: m.currency, budget, spend, pacing: pac });
     budgetMoney.push({ amount: budget, currency: m.currency });

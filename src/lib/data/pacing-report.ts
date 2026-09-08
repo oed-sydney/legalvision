@@ -57,10 +57,24 @@ function periodSpend(
   return { total, byDay };
 }
 
-function trailing7(byDay: Map<string, number>, lcd: string): number {
-  const start = new Date(`${lcd}T00:00:00Z`);
-  start.setUTCDate(start.getUTCDate() - 6);
-  const days = dateRangeList(start.toISOString().slice(0, 10), lcd);
+/**
+ * Recent daily run-rate = average spend over the last up-to-7 COMPLETE days within the
+ * period. `lcd` includes today's PARTIAL day (so spend-to-date matches Google Ads), so today
+ * is excluded from the rate — otherwise a half-finished day drags the average down. Bounded
+ * to periodStart so early-month days aren't diluted by pre-period zeros; once ≥7 complete days
+ * have elapsed it spans a full week, so weekday/weekend patterns average out. This is the
+ * "actual current spend" rate the projection extrapolates from.
+ */
+export function trailing7(byDay: Map<string, number>, lcd: string, periodStart: string): number {
+  const end = new Date(`${lcd}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() - 1); // last complete day (exclude today's partial)
+  const lastComplete = end.toISOString().slice(0, 10);
+  if (lastComplete < periodStart) return byDay.get(lcd) ?? 0; // only the first (partial) day exists
+  const s = new Date(`${lastComplete}T00:00:00Z`);
+  s.setUTCDate(s.getUTCDate() - 6);
+  const windowStart = s.toISOString().slice(0, 10);
+  const from = windowStart < periodStart ? periodStart : windowStart;
+  const days = dateRangeList(from, lastComplete);
   const vals = days.map((d) => byDay.get(d) ?? 0);
   return vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1);
 }
@@ -82,7 +96,7 @@ export async function pacingAccounts(f: FilterState): Promise<PacingAccountRow[]
       spend: total,
       now,
       timezone: acct.reportingTimezone,
-      trailingAvg7: trailing7(byDay, lcd),
+      trailingAvg7: trailing7(byDay, lcd, period.start),
     });
     rows.push({
       accountId: acct.id,
@@ -179,6 +193,7 @@ export function pacingMarkets(rows: PacingAccountRow[]): MarketRollup[] {
     if (accts.length === 0) continue;
     const budget = accts.reduce((s, r) => s + (r.pacing.budget ?? 0), 0);
     const spend = accts.reduce((s, r) => s + r.pacing.spend, 0);
+    const trailingAvg7 = accts.reduce((s, r) => s + r.pacing.trailingDailySpend, 0);
     const pacing = computePacing({
       periodStart: period.start,
       periodEnd: period.end,
@@ -186,6 +201,7 @@ export function pacingMarkets(rows: PacingAccountRow[]): MarketRollup[] {
       spend,
       now,
       timezone: m.displayTimezone,
+      trailingAvg7,
     });
     out.push({
       market: m.code,
@@ -259,7 +275,8 @@ export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
     const byDay = new Map<string, number>();
     for (const r of rows) byDay.set(r.date, (byDay.get(r.date) ?? 0) + r.spend);
     // derived budget: trailing daily run-rate × total days in period
-    const dailyBudget = trailing7(byDay, lcd) * 1.15;
+    const trailing = trailing7(byDay, lcd, period.start);
+    const dailyBudget = trailing * 1.15;
     const derivedBudget = Math.round((dailyBudget * daysInMonth) / 50) * 50;
     const pacing = computePacing({
       periodStart: period.start,
@@ -268,7 +285,7 @@ export function pacingCampaigns(f: FilterState): PacingCampaignRow[] {
       spend,
       now,
       timezone: acct.reportingTimezone,
-      trailingAvg7: trailing7(byDay, lcd),
+      trailingAvg7: trailing,
     });
     out.push({
       campaignId: cm.id,

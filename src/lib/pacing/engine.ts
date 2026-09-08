@@ -50,6 +50,8 @@ export interface PacingResult {
   pacingVariancePct: number | null;
   pacingIndex: number | null;
   dailyAvgSpend: number;
+  /** Effective daily run-rate used for the projection (recent trailing avg when supplied). */
+  trailingDailySpend: number;
   requiredDailySpend: number | null;
   projectedSpend: number | null;
   projectedSpendTrailing: number | null;
@@ -148,10 +150,16 @@ export function computePacing(input: PacingInput): PacingResult {
   const pacingVariancePct = expectedSpend === 0 ? null : pacingVariance / expectedSpend;
   const pacingIndex = expectedSpend === 0 ? null : spend / expectedSpend;
 
-  // Projection uses whole days remaining (spec §8 table), completed-days run rate.
+  // Projection = spend-to-date + recent daily run-rate × whole days remaining. Using the
+  // trailing run-rate (last complete week) rather than the from-day-1 average tracks the
+  // account's ACTUAL current spend and absorbs mid-month changes + weekday/weekend patterns.
+  // Falls back to the period average when no trailing rate is supplied.
   const projRemaining = basis === "partial" ? dTotal - basisDays : daysRemaining;
-  const projectedSpend = spend + dailyAvgSpend * projRemaining;
-  const projectedSpendTrailing = spend + trailingAvg7 * projRemaining;
+  const projectedSpend = spend + trailingAvg7 * projRemaining;
+  const projectedSpendTrailing = projectedSpend;
+  // Kept for reference: the naive from-day-1 linear projection.
+  const projectedSpendLinear = spend + dailyAvgSpend * projRemaining;
+  void projectedSpendLinear;
   const projectedVariance = projectedSpend - budget;
   const projectedVariancePct = projectedVariance / budget;
 
@@ -177,6 +185,7 @@ export function computePacing(input: PacingInput): PacingResult {
     pacingVariancePct,
     pacingIndex,
     dailyAvgSpend,
+    trailingDailySpend: trailingAvg7,
     requiredDailySpend,
     projectedSpend,
     projectedSpendTrailing,
@@ -228,6 +237,7 @@ function baseResult(p: {
     pacingVariancePct: null,
     pacingIndex: null,
     dailyAvgSpend: 0,
+    trailingDailySpend: 0,
     requiredDailySpend: null,
     projectedSpend: null,
     projectedSpendTrailing: null,
