@@ -13,8 +13,9 @@ import { crmLeadsForKeyword } from "./real/crm-leads";
  */
 
 export const SPEND_MULTIPLE = 2;
-const LOW_TOP_IS = 0.5; // top-of-page IS below this = barely serving at the top
-const HIGH_RANK_LOST = 0.25; // IS lost to rank above this = Ad Rank holding it back
+// "Low visibility" only when BOTH are weak: overall search IS < 40% AND top-of-page IS < 30%.
+const LOW_SEARCH_IS = 0.4;
+const LOW_TOP_IS = 0.3;
 
 /** ocid per market for Google Ads deep links (supplied by the client). */
 const GOOGLE_OCID: Record<string, string> = { AU: "80099916", UK: "844818473", NZ: "624968089" };
@@ -131,12 +132,14 @@ export async function underPerformers(country: string, account: string): Promise
   const rows: UnderPerformerRow[] = [];
   for (const k of allKws) {
     if (!inScope(k)) continue;
+    if (k.status === "paused") continue; // enabled keywords only
     if (k.conversions !== 0) continue; // non-converting only (0 conversions in the last 30 days)
     const target = targets.get(`${k.market}|${k.campaignName}`)?.targetCpa;
     if (!target || target <= 0) continue; // no yardstick → can't judge
     if (k.spend < SPEND_MULTIPLE * target) continue; // the gate
 
     const group = `${k.accountId}|${k.campaignName}|${k.adGroupName}`;
+    const searchIS = k.searchImpressionShare ?? null;
     const topIS = k.searchTopImpressionShare ?? null;
     const rankLost = k.searchRankLostImpressionShare ?? null;
     const ad = adByGroup.get(group);
@@ -161,7 +164,7 @@ export async function underPerformers(country: string, account: string): Promise
       impressionShare: k.searchImpressionShare ?? null,
       topImpressionShare: topIS,
       rankLostImpressionShare: rankLost,
-      visibilityConcern: (topIS != null && topIS < LOW_TOP_IS) || (rankLost != null && rankLost > HIGH_RANK_LOST),
+      visibilityConcern: searchIS != null && searchIS < LOW_SEARCH_IS && topIS != null && topIS < LOW_TOP_IS,
       ad: ad ? { adStrength: ad.adStrength, adType: ad.adType, adId: ad.adId } : null,
       adGroupKeywordCount: kwPerGroup.get(group) ?? 1,
       topSearchTerms: topTermsFor(k),

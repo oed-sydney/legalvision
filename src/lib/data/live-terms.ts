@@ -131,7 +131,7 @@ export async function refreshTermsCache(): Promise<{ searchTerms: number; keywor
       adGroupName: r.ad_group_name ?? "",
       text: r.keyword_text,
       matchType: matchType(r.keyword_match_type),
-      status: "enabled",
+      status: (r.keyword_status ?? "").toUpperCase() === "ENABLED" ? "enabled" : "paused",
       qualityScore: r.quality_score == null ? null : Number(r.quality_score),
       expectedCtr: rating(r.search_predicted_ctr),
       adRelevance: rating(r.creative_quality_score),

@@ -77,8 +77,8 @@ function Card({ r }: { r: UnderPerformerRow }) {
         <Metric label="Target CPA" value={formatMoney(r.targetCpa, r.currency)} />
         <Metric label="Clicks · 0 conv" value={formatInt(r.clicks)} tone="text-danger" />
         <Metric label="Quality Score" value={r.qualityScore == null ? "—" : String(r.qualityScore)} tone={r.qualityScore != null && r.qualityScore < 5 ? "text-danger" : "text-ink"} />
-        <Metric label="Top-of-page IS" value={pct(r.topImpressionShare)} tone={r.topImpressionShare != null && r.topImpressionShare < 0.5 ? "text-danger" : "text-ink"} />
-        <Metric label="IS lost (rank)" value={pct(r.rankLostImpressionShare)} tone={r.rankLostImpressionShare != null && r.rankLostImpressionShare > 0.25 ? "text-danger" : "text-ink"} />
+        <Metric label="Top-of-page IS" value={pct(r.topImpressionShare)} tone={r.topImpressionShare != null && r.topImpressionShare < 0.3 ? "text-danger" : "text-ink"} />
+        <Metric label="IS lost (rank)" value={pct(r.rankLostImpressionShare)} tone={r.rankLostImpressionShare != null && r.rankLostImpressionShare > 0.5 ? "text-danger" : "text-ink"} />
       </div>
 
       {open && (

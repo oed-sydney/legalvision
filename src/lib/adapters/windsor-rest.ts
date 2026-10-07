@@ -175,6 +175,7 @@ export interface WindsorKeywordRow {
   ad_group_name: string;
   keyword_text: string;
   keyword_match_type: string;
+  keyword_status: string | null;
   quality_score: number | null;
   creative_quality_score: string | null; // ad relevance
   post_click_quality_score: string | null; // landing page experience
@@ -190,7 +191,7 @@ export interface WindsorKeywordRow {
 
 export function fetchGoogleKeywordsQs(datePreset = "last_30d") {
   return pull<WindsorKeywordRow>(
-    "account_name,campaign,ad_group_name,keyword_text,keyword_match_type,quality_score,creative_quality_score,post_click_quality_score,search_predicted_ctr,search_impression_share,search_top_impression_share,search_rank_lost_impression_share,impressions,clicks,spend,conversions",
+    "account_name,campaign,ad_group_name,keyword_text,keyword_match_type,keyword_status,quality_score,creative_quality_score,post_click_quality_score,search_predicted_ctr,search_impression_share,search_top_impression_share,search_rank_lost_impression_share,impressions,clicks,spend,conversions",
     { date_preset: datePreset }
   );
 }
