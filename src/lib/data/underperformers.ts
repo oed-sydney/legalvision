@@ -35,6 +35,7 @@ export interface UnderPerformerRow {
   adGroupName: string;
   currency: CurrencyCode;
   spend: number;
+  clicks: number;
   conversions: number;
   liveLeads: number;
   actualCpa: number | null;
@@ -48,7 +49,8 @@ export interface UnderPerformerRow {
   visibilityConcern: boolean;
   ad: { adStrength: string | null; adType: string | null; adId: string } | null;
   adGroupKeywordCount: number;
-  topSearchTerms: UnderPerformerTerm[];
+  topSearchTerms: UnderPerformerTerm[]; // best-matched to this keyword (may be empty)
+  adGroupTopTerms: UnderPerformerTerm[]; // ad group's top spenders (fallback for display)
   crmLeads: number;
   googleAdsUrl: string | null;
 }
@@ -78,16 +80,58 @@ export async function underPerformers(country: string, account: string): Promise
     kwPerGroup.set(g, (kwPerGroup.get(g) ?? 0) + 1);
   }
 
+  // Google's API can't map a search term to a specific keyword. Best approximation: within
+  // each ad group, assign every search term to the ONE keyword it best matches, so each
+  // keyword gets its own terms (not the whole ad group's). Score = share of the keyword's
+  // words present in the term, then most words matched, then longest (most specific) keyword.
+  // Light singularisation so plural variants match ("lawyers" ↔ "lawyer").
+  const stem = (w: string) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+  const tokens = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean).map(stem);
+  const groupKey = (x: { accountId: string; campaignName: string; adGroupName: string }) =>
+    `${x.accountId}|${x.campaignName}|${x.adGroupName}`;
+
+  const kwByGroup = new Map<string, { id: string; toks: string[] }[]>();
+  for (const k of allKws) {
+    const g = groupKey(k);
+    (kwByGroup.get(g) ?? kwByGroup.set(g, []).get(g)!).push({ id: k.id, toks: tokens(k.text) });
+  }
+  const assigned = new Map<string, UnderPerformerTerm[]>(); // keyword id → its best-matched terms
+  const better = (a: number[], b: number[]) =>
+    a[0] > b[0] || (a[0] === b[0] && (a[1] > b[1] || (a[1] === b[1] && a[2] > b[2])));
+  for (const t of terms) {
+    const cands = kwByGroup.get(groupKey(t));
+    if (!cands) continue;
+    const tt = new Set(tokens(t.term));
+    let best: string | null = null;
+    let bestScore = [-1, -1, -1];
+    for (const c of cands) {
+      if (c.toks.length === 0) continue;
+      const matched = c.toks.filter((w) => tt.has(w)).length;
+      if (matched === 0) continue;
+      const score = [matched / c.toks.length, matched, c.toks.length];
+      if (better(score, bestScore)) {
+        bestScore = score;
+        best = c.id;
+      }
+    }
+    if (best) (assigned.get(best) ?? assigned.set(best, []).get(best)!).push({ term: t.term, spend: t.spend, conversions: t.conversions, currency: t.currency });
+  }
   const topTermsFor = (k: Keyword): UnderPerformerTerm[] =>
-    terms
-      .filter((t) => t.accountId === k.accountId && t.campaignName === k.campaignName && t.adGroupName === k.adGroupName)
-      .sort((a, b) => b.spend - a.spend)
-      .slice(0, 5)
-      .map((t) => ({ term: t.term, spend: t.spend, conversions: t.conversions, currency: t.currency }));
+    (assigned.get(k.id) ?? []).sort((a, b) => b.spend - a.spend).slice(0, 5);
+
+  // Fallback when no term best-matches the keyword specifically: the ad group's top spenders.
+  const termsByGroup = new Map<string, UnderPerformerTerm[]>();
+  for (const t of terms) {
+    const g = groupKey(t);
+    (termsByGroup.get(g) ?? termsByGroup.set(g, []).get(g)!).push({ term: t.term, spend: t.spend, conversions: t.conversions, currency: t.currency });
+  }
+  const adGroupTopFor = (k: Keyword): UnderPerformerTerm[] =>
+    (termsByGroup.get(groupKey(k)) ?? []).slice().sort((a, b) => b.spend - a.spend).slice(0, 5);
 
   const rows: UnderPerformerRow[] = [];
   for (const k of allKws) {
     if (!inScope(k)) continue;
+    if (k.conversions !== 0) continue; // non-converting only (0 conversions in the last 30 days)
     const target = targets.get(`${k.market}|${k.campaignName}`)?.targetCpa;
     if (!target || target <= 0) continue; // no yardstick → can't judge
     if (k.spend < SPEND_MULTIPLE * target) continue; // the gate
@@ -106,6 +150,7 @@ export async function underPerformers(country: string, account: string): Promise
       adGroupName: k.adGroupName,
       currency: k.currency,
       spend: k.spend,
+      clicks: k.clicks,
       conversions: k.conversions,
       liveLeads: k.liveLeads,
       actualCpa: k.conversions > 0 ? k.spend / k.conversions : null,
@@ -120,6 +165,7 @@ export async function underPerformers(country: string, account: string): Promise
       ad: ad ? { adStrength: ad.adStrength, adType: ad.adType, adId: ad.adId } : null,
       adGroupKeywordCount: kwPerGroup.get(group) ?? 1,
       topSearchTerms: topTermsFor(k),
+      adGroupTopTerms: adGroupTopFor(k),
       crmLeads: crmLeadsForKeyword(k.market, k.text),
       googleAdsUrl: GOOGLE_OCID[k.market] ? `https://ads.google.com/aw/keywords?ocid=${GOOGLE_OCID[k.market]}` : null,
     });

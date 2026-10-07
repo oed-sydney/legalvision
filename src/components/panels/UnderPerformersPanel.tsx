@@ -75,8 +75,8 @@ function Card({ r }: { r: UnderPerformerRow }) {
       <div className="grid grid-cols-3 gap-3 border-t border-[var(--lv-border)] px-4 py-3 sm:grid-cols-6">
         <Metric label="Spend" value={formatMoney(r.spend, r.currency)} />
         <Metric label="Target CPA" value={formatMoney(r.targetCpa, r.currency)} />
-        <Metric label="Actual CPA" value={r.actualCpa == null ? "— (0 conv)" : formatMoney(r.actualCpa, r.currency)} tone={r.actualCpa == null ? "text-danger" : "text-ink"} />
-        <Metric label="Conversions" value={formatInt(r.conversions)} />
+        <Metric label="Clicks · 0 conv" value={formatInt(r.clicks)} tone="text-danger" />
+        <Metric label="Quality Score" value={r.qualityScore == null ? "—" : String(r.qualityScore)} tone={r.qualityScore != null && r.qualityScore < 5 ? "text-danger" : "text-ink"} />
         <Metric label="Top-of-page IS" value={pct(r.topImpressionShare)} tone={r.topImpressionShare != null && r.topImpressionShare < 0.5 ? "text-danger" : "text-ink"} />
         <Metric label="IS lost (rank)" value={pct(r.rankLostImpressionShare)} tone={r.rankLostImpressionShare != null && r.rankLostImpressionShare > 0.25 ? "text-danger" : "text-ink"} />
       </div>
@@ -118,29 +118,37 @@ function Card({ r }: { r: UnderPerformerRow }) {
           </section>
 
           {/* 2. Top spending search terms */}
-          <section>
-            <div className="mb-1.5 text-[12px] font-semibold text-ink">Top spending search terms</div>
-            {r.topSearchTerms.length === 0 ? (
-              <div className="text-[12px] text-muted">No search-term rows cached for this ad group.</div>
-            ) : (
-              <table className="w-full text-[12px]">
-                <tbody>
-                  {r.topSearchTerms.map((t) => (
-                    <tr key={t.term} className="border-b border-[var(--lv-border)] last:border-0">
-                      <td className="py-1.5 pr-3 text-ink">{t.term}</td>
-                      <td className="px-3 py-1.5 text-right tnum text-secondary">{formatMoney(t.spend, t.currency)}</td>
-                      <td className="px-3 py-1.5 text-right tnum text-secondary">{formatInt(t.conversions)} conv</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div className="mt-1 text-[11px] text-muted">
-              {r.adGroupKeywordCount > 1
-                ? `Ad-group level — ${r.adGroupKeywordCount} keywords share this ad group (Google can't attribute a search term to one keyword).`
-                : "This keyword is alone in its ad group, so these terms are attributable to it."}
-            </div>
-          </section>
+          {(() => {
+            const keywordSpecific = r.topSearchTerms.length > 0;
+            const list = keywordSpecific ? r.topSearchTerms : r.adGroupTopTerms;
+            return (
+              <section>
+                <div className="mb-1.5 text-[12px] font-semibold text-ink">
+                  {keywordSpecific ? "Top spending search terms for this keyword" : "Top spending search terms in this keyword's ad group"}
+                </div>
+                {list.length === 0 ? (
+                  <div className="text-[12px] text-muted">No search-term rows cached for this ad group.</div>
+                ) : (
+                  <table className="w-full text-[12px]">
+                    <tbody>
+                      {list.map((t) => (
+                        <tr key={t.term} className="border-b border-[var(--lv-border)] last:border-0">
+                          <td className="py-1.5 pr-3 text-ink">{t.term}</td>
+                          <td className="px-3 py-1.5 text-right tnum text-secondary">{formatMoney(t.spend, t.currency)}</td>
+                          <td className="px-3 py-1.5 text-right tnum text-secondary">{formatInt(t.conversions)} conv</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <div className="mt-1 text-[11px] text-muted">
+                  {keywordSpecific
+                    ? "Google's API can't tie a search term to one keyword, so each ad group's terms are assigned to the keyword they best match — these best-match this keyword."
+                    : "Google's API can't attribute a search term to one keyword, and none matched this keyword specifically — showing the ad group's top spenders for context."}
+                </div>
+              </section>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -158,16 +166,17 @@ export function UnderPerformersPanel({ rows, usingLive }: { rows: UnderPerformer
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-[var(--lv-border)] bg-card px-4 py-8 text-center text-[13px] text-secondary">
-        No keywords in this market have spent ≥ 2× their campaign&apos;s target CPA. (Only campaigns with a target CPA set are assessed.)
+        No non-converting keywords in this market have spent ≥ 2× their campaign&apos;s target CPA. (Only campaigns with a target CPA set are assessed.)
       </div>
     );
   }
   return (
     <div className="space-y-3">
       <p className="text-[12px] leading-relaxed text-muted">
-        Keywords that have spent at least <b>2× their campaign target CPA</b> (last 30 days). Before pausing, check the three
-        triage signals on each: <b>visibility</b> (are we serving at the top, or losing rank?), the <b>top spending search terms</b>
-        (are they relevant?), and <b>ad relevance</b> (is the ad meeting intent?). CRM leads show real leads attributed to the keyword.
+        Keywords with <b>0 conversions</b> in the last 30 days that still spent at least <b>2× their campaign target CPA</b>. Before
+        pausing, check the three triage signals on each: <b>visibility</b> (are we serving at the top, or losing rank?), the
+        <b> top spending search terms</b> (are they relevant?), and <b>ad relevance</b> (is the ad meeting intent?). CRM leads show
+        real leads attributed to the keyword — a keyword with 0 platform conversions but CRM leads is converting off-platform, so keep it.
       </p>
       {rows.map((r) => (
         <Card key={r.id} r={r} />
