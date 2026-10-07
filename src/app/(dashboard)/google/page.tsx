@@ -5,6 +5,8 @@ import { PanelTabs } from "@/components/ui/PanelTabs";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { CampaignsTable, type CampaignRow } from "@/components/tables/CampaignsTable";
 import { KeywordsTable, type KeywordRow } from "@/components/tables/KeywordsTable";
+import { UnderPerformersPanel } from "@/components/panels/UnderPerformersPanel";
+import { underPerformers } from "@/lib/data/underperformers";
 import { SearchTermsTable, type SearchTermRow } from "@/components/tables/SearchTermsTable";
 import { ComboTrend } from "@/components/charts/ComboTrend";
 import { BarList } from "@/components/charts/BarList";
@@ -61,6 +63,7 @@ export default async function GooglePage({
 
   const kws = usingLive ? liveKws : scopedKeywords(f);
   const qs = qsSummary(kws);
+  const underperf = await underPerformers(f.country, f.account);
 
   // real rows are fixed 30-day aggregates — never scale them to the window
   const tf = usingLive ? 1 : wf;
@@ -242,6 +245,18 @@ export default async function GooglePage({
                   Keywords &amp; Quality Score components
                 </CardTitle>
                 <KeywordsTable rows={keywordRows} />
+              </Card>
+            ),
+          },
+          {
+            key: "underperformers",
+            label: "Under Performing Keywords",
+            panel: (
+              <Card>
+                <CardTitle action={<span className="text-[12px] text-muted">Spent ≥ 2× campaign target CPA · {underperf.rows.length} keyword{underperf.rows.length === 1 ? "" : "s"}</span>}>
+                  Under Performing Keywords
+                </CardTitle>
+                <UnderPerformersPanel rows={underperf.rows} usingLive={underperf.usingLive} />
               </Card>
             ),
           },

@@ -179,6 +179,9 @@ export interface WindsorKeywordRow {
   creative_quality_score: string | null; // ad relevance
   post_click_quality_score: string | null; // landing page experience
   search_predicted_ctr: string | null; // expected CTR
+  search_impression_share: number | null;
+  search_top_impression_share: number | null;
+  search_rank_lost_impression_share: number | null;
   impressions: number;
   clicks: number;
   spend: number;
@@ -187,8 +190,26 @@ export interface WindsorKeywordRow {
 
 export function fetchGoogleKeywordsQs(datePreset = "last_30d") {
   return pull<WindsorKeywordRow>(
-    "account_name,campaign,ad_group_name,keyword_text,keyword_match_type,quality_score,creative_quality_score,post_click_quality_score,search_predicted_ctr,impressions,clicks,spend,conversions",
+    "account_name,campaign,ad_group_name,keyword_text,keyword_match_type,quality_score,creative_quality_score,post_click_quality_score,search_predicted_ctr,search_impression_share,search_top_impression_share,search_rank_lost_impression_share,impressions,clicks,spend,conversions",
     { date_preset: datePreset }
+  );
+}
+
+export interface WindsorAdRow {
+  account_name: string;
+  campaign: string;
+  ad_group_name: string;
+  ad_id: string;
+  ad_type: string | null;
+  ad_strength: string | null;
+  spend: number;
+}
+
+/** Per-ad rows (ad strength + id/type; Windsor doesn't return the RSA headline/description text). */
+export function fetchGoogleAdGroupAds(datePreset = "last_30d") {
+  return pull<WindsorAdRow>(
+    "account_name,campaign,ad_group_name,ad_id,ad_type,ad_strength,spend",
+    { date_preset: datePreset, filter: JSON.stringify([["spend", "gt", 0]]) }
   );
 }
 

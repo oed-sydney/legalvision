@@ -124,6 +124,10 @@ export interface Keyword {
   liveLeads: number;
   currency: CurrencyCode;
   qs30dAgo: number | null;
+  /** Keyword-level search impression share (0–1), where available (live Windsor pull). */
+  searchImpressionShare?: number | null;
+  searchTopImpressionShare?: number | null;
+  searchRankLostImpressionShare?: number | null;
   source: DataSource;
 }
 

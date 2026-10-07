@@ -9,6 +9,7 @@ import {
   fetchGoogleSearchTermLiveLeads,
   fetchGoogleKeywordsQs,
   fetchGoogleKeywordLiveLeads,
+  fetchGoogleAdGroupAds,
 } from "../adapters/windsor-rest";
 import { kvGet, kvSet } from "./kv";
 import { captureQsSnapshot, keywordQsDaysAgo, stableKwKey } from "./qs-snapshot";
@@ -27,11 +28,24 @@ const KV_TERM_CAP = 3000;
 
 const CACHE_PATH = path.join(process.cwd(), "data", "terms-cache.json");
 
+/** Top-spending ad per ad group (Windsor exposes strength/id/type, not RSA copy text). */
+export interface AdGroupAd {
+  market: MarketCode;
+  accountId: string;
+  campaignName: string;
+  adGroupName: string;
+  adId: string;
+  adType: string | null;
+  adStrength: string | null;
+  spend: number;
+}
+
 export interface TermsCache {
   builtAt: string;
   rangeDays: number;
   searchTerms: SearchTerm[];
   keywords: Keyword[];
+  ads?: AdGroupAd[];
 }
 
 function rating(v: string | null | undefined): ComponentRating {
@@ -50,11 +64,12 @@ function matchType(v: string | null | undefined): "exact" | "phrase" | "broad" {
 }
 
 export async function refreshTermsCache(): Promise<{ searchTerms: number; keywords: number }> {
-  const [terms, termLL, kws, kwLL] = await Promise.all([
+  const [terms, termLL, kws, kwLL, adRows] = await Promise.all([
     fetchGoogleSearchTerms("last_30d"),
     fetchGoogleSearchTermLiveLeads("last_30d"),
     fetchGoogleKeywordsQs("last_30d"),
     fetchGoogleKeywordLiveLeads("last_30d").catch(() => []),
+    fetchGoogleAdGroupAds("last_30d").catch(() => []),
   ]);
 
   const llByTerm = new Map<string, number>();
@@ -128,9 +143,36 @@ export async function refreshTermsCache(): Promise<{ searchTerms: number; keywor
       liveLeads: llByKw.get(`${acctId}|${r.campaign}|${r.keyword_text}`) ?? 0,
       currency: acct.currency as CurrencyCode,
       qs30dAgo: null, // no QS history in the 30d snapshot
+      searchImpressionShare: r.search_impression_share == null ? null : Number(r.search_impression_share),
+      searchTopImpressionShare: r.search_top_impression_share == null ? null : Number(r.search_top_impression_share),
+      searchRankLostImpressionShare: r.search_rank_lost_impression_share == null ? null : Number(r.search_rank_lost_impression_share),
       source: "windsor",
     });
   }
+
+  // Top-spending ad per ad group (for the under-performing keywords triage view).
+  const adByGroup = new Map<string, AdGroupAd>();
+  for (const r of adRows) {
+    const acctId = NAME_TO_ACCT[r.account_name];
+    if (!acctId) continue;
+    const acct = ACCOUNT_BY_ID[acctId];
+    const key = `${acctId}|${r.campaign}|${r.ad_group_name}`;
+    const spend = Number(r.spend) || 0;
+    const prev = adByGroup.get(key);
+    if (!prev || spend > prev.spend) {
+      adByGroup.set(key, {
+        market: acct.market as MarketCode,
+        accountId: acctId,
+        campaignName: r.campaign ?? "",
+        adGroupName: r.ad_group_name ?? "",
+        adId: String(r.ad_id ?? ""),
+        adType: r.ad_type ?? null,
+        adStrength: r.ad_strength ?? null,
+        spend,
+      });
+    }
+  }
+  const ads = [...adByGroup.values()];
 
   // Fill qs30dAgo from the QS snapshot ~30 days ago (populates once history accrues),
   // then capture today's snapshot so the history keeps building.
@@ -152,12 +194,13 @@ export async function refreshTermsCache(): Promise<{ searchTerms: number; keywor
     rangeDays: 30,
     searchTerms,
     keywords,
+    ads,
   };
 
-  // Durable, serverless-safe copy in Postgres (trimmed): all keywords + top search
+  // Durable, serverless-safe copy in Postgres (trimmed): all keywords + ads + top search
   // terms by spend. This is what production reads (the full fs cache below is dev-only).
   const topTerms = [...searchTerms].sort((a, b) => b.spend - a.spend).slice(0, KV_TERM_CAP);
-  await kvSet(KV_KEY, { builtAt: cache.builtAt, rangeDays: 30, searchTerms: topTerms, keywords });
+  await kvSet(KV_KEY, { builtAt: cache.builtAt, rangeDays: 30, searchTerms: topTerms, keywords, ads });
   _kvMemo = null; // invalidate the in-process KV memo so the next read sees fresh data
 
   // Full local filesystem cache (fast path for dev); ignore on read-only hosts.
