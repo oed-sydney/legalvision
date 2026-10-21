@@ -157,6 +157,7 @@ function Card({ r }: { r: UnderPerformerRow }) {
 
 export function UnderPerformersPanel({ rows, usingLive }: { rows: UnderPerformerRow[]; usingLive: boolean }) {
   const [hideWithCrm, setHideWithCrm] = useState(false);
+  const [onlyLowVis, setOnlyLowVis] = useState(false);
   if (!usingLive) {
     return (
       <div className="rounded-lg border border-[var(--lv-border)] bg-card px-4 py-8 text-center text-[13px] text-secondary">
@@ -172,7 +173,8 @@ export function UnderPerformersPanel({ rows, usingLive }: { rows: UnderPerformer
     );
   }
   const withCrm = rows.filter((r) => r.crmLeads > 0).length;
-  const visible = hideWithCrm ? rows.filter((r) => r.crmLeads === 0) : rows;
+  const lowVisCount = rows.filter((r) => r.visibilityConcern).length;
+  const visible = rows.filter((r) => (!hideWithCrm || r.crmLeads === 0) && (!onlyLowVis || r.visibilityConcern));
   return (
     <div className="space-y-3">
       <p className="text-[12px] leading-relaxed text-muted">
@@ -182,18 +184,25 @@ export function UnderPerformersPanel({ rows, usingLive }: { rows: UnderPerformer
         real leads attributed to the keyword — a keyword with 0 platform conversions but CRM leads is converting off-platform, so keep it.
       </p>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--lv-border)] bg-card px-3 py-2">
-        <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={hideWithCrm} onChange={(e) => setHideWithCrm(e.target.checked)} className="h-4 w-4" />
-          <span className="font-medium text-ink">Hide keywords with CRM leads</span>
-          <span className="text-muted">({withCrm} of {rows.length} have CRM leads)</span>
-        </label>
-        <span className="text-[12px] text-secondary">{visible.length} shown{hideWithCrm ? " — likeliest pure-waste candidates" : ""}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 rounded-lg border border-[var(--lv-border)] bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <label className="flex items-center gap-2 text-[13px]">
+            <input type="checkbox" checked={hideWithCrm} onChange={(e) => setHideWithCrm(e.target.checked)} className="h-4 w-4" />
+            <span className="font-medium text-ink">Hide keywords with CRM leads</span>
+            <span className="text-muted">({withCrm} of {rows.length})</span>
+          </label>
+          <label className="flex items-center gap-2 text-[13px]">
+            <input type="checkbox" checked={onlyLowVis} onChange={(e) => setOnlyLowVis(e.target.checked)} className="h-4 w-4" />
+            <span className="font-medium text-ink">Only low-visibility keywords</span>
+            <span className="text-muted">({lowVisCount} of {rows.length})</span>
+          </label>
+        </div>
+        <span className="text-[12px] text-secondary">{visible.length} shown{hideWithCrm && !onlyLowVis ? " — likeliest pure-waste candidates" : ""}</span>
       </div>
 
       {visible.length === 0 ? (
         <div className="rounded-lg border border-[var(--lv-border)] bg-card px-4 py-8 text-center text-[13px] text-secondary">
-          Every under-performing keyword in this market has CRM leads — none are pure waste.
+          No keywords match the current filters{onlyLowVis ? " (no low-visibility keywords in this market)" : hideWithCrm ? " — every under-performing keyword here has CRM leads" : ""}.
         </div>
       ) : (
         visible.map((r) => <Card key={r.id} r={r} />)
