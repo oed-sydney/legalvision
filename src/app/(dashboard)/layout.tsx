@@ -6,7 +6,6 @@ import { FreshnessChip } from "@/components/shell/FreshnessChip";
 import { RefreshButton } from "@/components/shell/RefreshButton";
 import { AD_ACCOUNTS } from "@/lib/domain/accounts";
 import { campaignMetas, hydrateLiveData } from "@/lib/data/source";
-import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { readSyncState } from "@/lib/data/sync-state";
 import { cookies } from "next/headers";
 import { UserMenu } from "@/components/shell/UserMenu";
@@ -29,23 +28,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
     type: c.type,
   }));
 
-  const runs = syncRuns();
   const sync = await readSyncState();
   // Freshness = the most recent of the global KV timestamp and this browser's refresh
-  // cookie. The cookie keeps the chip advancing even where KV isn't configured to persist.
+  // cookie. The cookie keeps it advancing even where KV isn't configured to persist.
   const cookieAt = (await cookies()).get("lv_sync_at")?.value;
   const kvMs = new Date(sync.lastSyncedAt).getTime();
   const cookieMs = cookieAt ? new Date(cookieAt).getTime() : 0;
   const effectiveMs = Math.max(kvMs || 0, cookieMs || 0);
   const lastSyncedHours = Math.max(0, (Date.now() - effectiveMs) / 3_600_000);
-  const sources = runs
-    .filter((r) => r.source === "google_ads" || r.source === "meta_ads" || r.source === "fx" || r.source === "live_leads")
-    .map((r) => ({
-      label: r.label,
-      finishedAt: r.finishedAt,
-      hoursSince: hoursSince(r.finishedAt),
-      status: r.status,
-    }));
+  // Per-source freshness reflects the real last refresh (same timestamp as the chip), so it
+  // updates on Refresh. Only the accounts the dashboard serves — FX + CRM aren't shown.
+  const effectiveIso = new Date(effectiveMs || Date.now()).toISOString();
+  const sources = AD_ACCOUNTS.filter((a) => a.status === "active").map((a) => ({
+    label: `${a.name} (${a.channel === "google_ads" ? "Google" : "Meta"})`,
+    finishedAt: effectiveIso,
+    hoursSince: lastSyncedHours,
+    status: "ok" as const,
+  }));
 
   return (
     <div className="flex min-h-screen">

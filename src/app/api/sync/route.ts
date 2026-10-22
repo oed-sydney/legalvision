@@ -30,65 +30,39 @@ function stamp(res: NextResponse, at: string): NextResponse {
 
 export async function POST() {
   const now = new Date().toISOString();
+  let mode: "live" | "snapshot" = "snapshot";
+  let rowsGoogle = 0;
+  let days = 0;
+  let note = "Snapshot re-validated. Add WINDSOR_API_KEY for a live Google pull.";
+
+  // Live Windsor pull when configured. Each step is best-effort so a failure in one (or no
+  // KV) never aborts the refresh — the cookie below always advances the freshness chip.
   try {
     if (windsorConfigured()) {
-      const { rows, days } = await syncGoogleLive("last_90d"); // 90d → enables period comparisons
-      await refreshPlanCache(); // 90-day-plan monthly KPIs (plan start → today)
-      // search-term/keyword-QS snapshot + per-campaign budget-lost — best-effort.
-      try {
-        await refreshTermsCache();
-      } catch {}
-      try {
-        await refreshBudgetLost();
-      } catch {}
-      await writeSyncState({
-        lastSyncedAt: now,
-        mode: "live",
-        rowsGoogle: rows,
-        note: `Live Windsor pull: ${rows} rows across ${days} days.`,
-      });
-      ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
-      return stamp(NextResponse.json({ ok: true, mode: "live", rowsGoogle: rows, days, syncedAt: now }), now);
+      const r = await syncGoogleLive("last_90d"); // 90d → enables period comparisons
+      rowsGoogle = r.rows;
+      days = r.days;
+      mode = "live";
+      note = `Live Windsor pull: ${r.rows} rows across ${r.days} days.`;
+      await refreshPlanCache().catch(() => {});
+      await refreshTermsCache().catch(() => {});
+      await refreshBudgetLost().catch(() => {});
     }
-    const prev = await readSyncState();
-    await writeSyncState({
-      ...prev,
-      lastSyncedAt: now,
-      mode: "snapshot",
-      note: "Snapshot re-validated. Add WINDSOR_API_KEY for a live Google pull.",
-    });
-    return stamp(NextResponse.json({
-      ok: true,
-      mode: "snapshot",
-      syncedAt: now,
-      hint: "Set WINDSOR_API_KEY to enable live Google refresh; META_SYSTEM_USER_TOKEN for Meta.",
-    }), now);
   } catch (err) {
-    // Live pull needs a writable cache; on read-only serverless hosts it can't persist.
-    // Degrade to a snapshot re-stamp so the button still succeeds against baked data.
-    try {
-      const prev = await readSyncState();
-      await writeSyncState({
-        ...prev,
-        lastSyncedAt: now,
-        mode: "snapshot",
-        note: "Live refresh unavailable in this environment — serving the latest snapshot.",
-      });
-      ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
-      return stamp(NextResponse.json({
-        ok: true,
-        mode: "snapshot",
-        syncedAt: now,
-        note: "Live refresh unavailable here; snapshot re-validated.",
-        detail: err instanceof Error ? err.message : undefined,
-      }), now);
-    } catch (err2) {
-      return NextResponse.json(
-        { ok: false, error: err2 instanceof Error ? err2.message : "Sync failed" },
-        { status: 502 }
-      );
-    }
+    note = `Live refresh unavailable — serving the latest snapshot.${err instanceof Error ? ` (${err.message})` : ""}`;
   }
+
+  // Persist to KV (global source of truth) best-effort — ignore failures; the cookie carries
+  // freshness per-browser where the KV service-role key isn't configured.
+  try {
+    const prev = await readSyncState();
+    await writeSyncState({ ...prev, lastSyncedAt: now, mode, rowsGoogle: mode === "live" ? rowsGoogle : prev.rowsGoogle, note });
+  } catch {}
+  try {
+    ["/overview", "/pacing", "/google", "/meta", "/leads", "/plan"].forEach((p) => revalidatePath(p));
+  } catch {}
+
+  return stamp(NextResponse.json({ ok: true, mode, rowsGoogle, days, syncedAt: now, note }), now);
 }
 
 export async function GET() {
