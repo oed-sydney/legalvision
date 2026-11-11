@@ -9,8 +9,11 @@ import { allBudgets as budgets } from "@/lib/data/budgets-store";
 import { syncRuns, hoursSince } from "@/lib/data/ops";
 import { BudgetEditor } from "@/components/admin/BudgetEditor";
 import { AlertsEditor } from "@/components/admin/AlertsEditor";
+import { AutopaceEditor } from "@/components/admin/AutopaceEditor";
 import { InviteUserForm } from "@/components/admin/InviteUserForm";
 import { getAlertConfig } from "@/lib/alerts/config";
+import { getAutopaceConfig, getAutopaceLog } from "@/lib/pacing/autopace-config";
+import { computeAutopace } from "@/lib/pacing/autopace";
 import { emailConfigured } from "@/lib/alerts/email";
 import { getSessionProfile } from "@/lib/auth/session";
 import { listAppUsers } from "@/lib/auth/users";
@@ -28,6 +31,11 @@ export default async function AdminPage() {
   const userRows = await listAppUsers();
   const runs = syncRuns();
   const alertConfig = await getAlertConfig();
+  const [autopaceConfig, autopacePlan, autopaceLog] = await Promise.all([
+    getAutopaceConfig(),
+    computeAutopace(),
+    getAutopaceLog(),
+  ]);
 
   return (
     <div>
@@ -115,6 +123,11 @@ export default async function AdminPage() {
                 <AlertsEditor initial={alertConfig} emailReady={emailConfigured()} />
               </Card>
             ),
+          },
+          {
+            key: "autopace",
+            label: "Auto-pacing",
+            panel: <AutopaceEditor initial={autopaceConfig} plan={autopacePlan} log={autopaceLog} />,
           },
           {
             key: "connections",

@@ -15,7 +15,7 @@ export const SNAPSHOT_FROM = "2026-06-14";
 export const SNAPSHOT_TO = "2026-07-13";
 export const SNAPSHOT_PULLED_AT = "2026-07-14T02:30:00Z";
 
-export type AcctCode = "au-google" | "nz-google" | "uk-google" | "au-meta" | "uk-meta";
+export type AcctCode = "au-google" | "nz-google" | "uk-google" | "au-meta" | "uk-meta" | "nz-meta";
 
 /** Real Google Live Leads conversion-action names (validated per account). */
 export const LIVE_LEADS_ACTION: Record<string, string> = {
@@ -224,8 +224,9 @@ export const GOOGLE_CAMPAIGN_LIVE_LEADS: [AcctCode, string, number][] = [
  */
 
 export type MetaFunnel = "BOFU" | "SME Publication" | "Traffic";
-export type MetaMarket = "AU" | "UK";
-export type MetaCurrency = "AUD" | "GBP";
+// AU/UK shipped first; NZ joined once its Meta account was granted to the system user.
+export type MetaMarket = "AU" | "UK" | "NZ";
+export type MetaCurrency = "AUD" | "GBP" | "NZD";
 
 export interface MetaAccountSnap {
   acct: AcctCode;

@@ -5,7 +5,8 @@ import { PanelTabs } from "@/components/ui/PanelTabs";
 import { CampaignsTable } from "@/components/tables/CampaignsTable";
 import { MetaAdsPanel } from "@/components/panels/MetaAdsPanel";
 import { parseFilters, type FilterState } from "@/lib/filters/schema";
-import { metaSummary, metaCampaignRows, META_WINDOW_LABEL, META_PULLED_AT } from "@/lib/data/real/meta";
+import { metaSummary, metaCampaignRows } from "@/lib/data/real/meta";
+import { resolveMeta } from "@/lib/data/live-meta";
 import { realMetaAds } from "@/lib/data/real/meta-creatives";
 import { formatInt, formatMoney, formatPercent } from "@/lib/metrics/format";
 
@@ -17,10 +18,16 @@ export default async function MetaPage({
   const raw = parseFilters(await searchParams);
   const f: FilterState = { ...raw, channel: "meta_ads" }; // Meta-only area
 
-  const s = metaSummary(f.country, f.account);
+  const [s, campaignRows, meta] = await Promise.all([
+    metaSummary(f.country, f.account),
+    metaCampaignRows(f.country, f.account),
+    resolveMeta(),
+  ]);
   const cur = s.currency;
   const est = s.estimated;
-  const campaignRows = metaCampaignRows(f.country, f.account);
+  const subtitle = meta.live
+    ? `Last 30 days · live Meta Marketing API data${meta.builtAt ? ` · refreshed ${meta.builtAt.slice(0, 10)}` : ""} · SME Publication vs BOFU leads shown separately`
+    : `Last 30 days · real ad-level snapshot · SME Publication vs BOFU leads shown separately`;
   const ads = realMetaAds().filter(
     (a) => (f.country === "all" || a.market === f.country) && (f.account === "all" || a.accountId === f.account)
   );
@@ -29,16 +36,12 @@ export default async function MetaPage({
 
   return (
     <div>
-      <PageHeader
-        title="Meta Ads"
-        subtitle={`${META_WINDOW_LABEL} · real ad-level data pulled ${META_PULLED_AT} · SME Publication vs BOFU leads shown separately`}
-      />
+      <PageHeader title="Meta Ads" subtitle={subtitle} />
 
       {s.markets === 0 ? (
         <Card>
           <div className="px-1 py-6 text-[13px] text-secondary">
-            No Meta data for this selection. Meta NZ isn&apos;t connected yet (Meta Marketing API access is still
-            being rolled out for that ad account) — AU and UK are live.
+            No Meta data for this selection in the current window.
           </div>
         </Card>
       ) : (

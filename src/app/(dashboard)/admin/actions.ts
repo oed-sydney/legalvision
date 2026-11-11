@@ -9,6 +9,8 @@ import { getSessionProfile } from "@/lib/auth/session";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { setAlertConfig, type AlertConfig } from "@/lib/alerts/config";
 import { sendTestAlert } from "@/lib/alerts/run";
+import { setAutopaceConfig, type AutopaceConfig } from "@/lib/pacing/autopace-config";
+import { computeAutopace, applyAutopace } from "@/lib/pacing/autopace";
 
 const schema = z.object({
   accountId: z.string(),
@@ -57,6 +59,56 @@ export async function sendTestAlertAction() {
   const me = await getSessionProfile();
   if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
   return sendTestAlert();
+}
+
+const funnelShares = z
+  .object({
+    BOFU: z.number().min(0).max(100).optional(),
+    "SME Publication": z.number().min(0).max(100).optional(),
+    Traffic: z.number().min(0).max(100).optional(),
+  })
+  .partial();
+
+const autopaceSchema = z.object({
+  mode: z.enum(["off", "recommend", "auto"]),
+  accounts: z.array(z.string()).max(10),
+  targetUtilisationPct: z.number().min(50).max(150),
+  maxChangePct: z.number().min(5).max(100),
+  minDailyBudget: z.number().min(0).max(100_000),
+  maxDailyBudget: z.number().min(0).max(1_000_000),
+  minChangeAbs: z.number().min(0).max(10_000),
+  allocationMode: z.enum(["auto", "manual"]),
+  allocations: z.record(z.string(), funnelShares).default({}),
+  autoProtect: z.object({ enabled: z.boolean(), capPct: z.number().min(50).max(150) }),
+});
+
+/** Save the Meta auto-pacing config (Admin → Auto-pacing). Admin only. */
+export async function saveAutopaceConfig(input: AutopaceConfig) {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
+  const parsed = autopaceSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: "Check the auto-pacing settings." };
+  await setAutopaceConfig(parsed.data);
+  revalidatePath("/admin");
+  return { ok: true as const };
+}
+
+/**
+ * Apply the CURRENT auto-pacing recommendations now (one-click). Recomputes the plan
+ * server-side (never trusts client numbers) before writing budgets via the Meta API.
+ */
+export async function applyAutopaceNow() {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
+  try {
+    const plan = await computeAutopace();
+    const res = await applyAutopace(plan, me.email ?? "admin");
+    revalidatePath("/admin");
+    revalidatePath("/meta");
+    return { ok: true as const, ...res };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Apply failed." };
+  }
 }
 
 const inviteSchema = z.object({

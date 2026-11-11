@@ -1,12 +1,14 @@
 import type { CurrencyCode } from "../../domain/types";
 import type { CampaignRow } from "@/components/tables/CampaignsTable";
 import { fxRate } from "../../currency/fx";
-import { META_ACCOUNTS, META_CAMPAIGNS, type MetaCurrency } from "./snapshot";
+import { type MetaCurrency } from "./snapshot";
+import { resolveMeta } from "../live-meta";
 
 /**
  * Real-Meta read layer for the Social tab. Drives the Snapshot tiles and Campaigns table
- * directly from the real 30d pull (see snapshot.ts) — independent of the daily warehouse,
- * so reach/frequency stay account-level (non-additive) and the two lead types stay split.
+ * from the live Meta pull when available (see live-meta.ts), falling back to the baked
+ * snapshot — independent of the daily warehouse, so reach/frequency stay account-level
+ * (non-additive) and the two lead types stay split.
  *
  * The data window is a rolling last-30-days snapshot; label it as such.
  */
@@ -15,7 +17,7 @@ export const META_WINDOW_LABEL = "Last 30 days";
 export const META_PULLED_AT = "2026-08-18";
 
 function toAud(v: number, cur: MetaCurrency): number {
-  return cur === "AUD" ? v : v * fxRate("GBP", "AUD").rate;
+  return cur === "AUD" ? v : v * fxRate(cur, "AUD").rate;
 }
 
 export interface MetaSummary {
@@ -38,7 +40,8 @@ export interface MetaSummary {
 }
 
 /** Aggregate the real Meta account snapshot for the current market/account filter. */
-export function metaSummary(country: string, account: string): MetaSummary {
+export async function metaSummary(country: string, account: string): Promise<MetaSummary> {
+  const { accounts: META_ACCOUNTS } = await resolveMeta();
   const accts = META_ACCOUNTS.filter(
     (a) => (country === "all" || a.market === country) && (account === "all" || a.acct === account)
   );
@@ -81,7 +84,8 @@ export function metaSummary(country: string, account: string): MetaSummary {
 }
 
 /** Real Meta campaigns → CampaignsTable rows for the current filter (each with its own numbers). */
-export function metaCampaignRows(country: string, account: string): CampaignRow[] {
+export async function metaCampaignRows(country: string, account: string): Promise<CampaignRow[]> {
+  const { campaigns: META_CAMPAIGNS } = await resolveMeta();
   return META_CAMPAIGNS.filter(
     (c) => (country === "all" || c.market === country) && (account === "all" || c.acct === account)
   )

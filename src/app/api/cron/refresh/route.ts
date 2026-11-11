@@ -7,6 +7,9 @@ import { refreshBudgetLost } from "@/lib/data/budget-lost";
 import { refreshPlanCache } from "@/lib/plan/metrics";
 import { writeSyncState } from "@/lib/data/sync-state";
 import { runBudgetAlerts } from "@/lib/alerts/run";
+import { metaConfigured } from "@/lib/adapters/meta-rest";
+import { refreshMetaCache } from "@/lib/data/live-meta";
+import { runAutopace, runAutoProtect } from "@/lib/pacing/autopace";
 
 // The live pull + terms + plan can take ~40s; allow headroom.
 export const maxDuration = 60;
@@ -44,9 +47,23 @@ export async function GET(request: Request) {
     try {
       await refreshPlanCache();
     } catch {}
+    // Live Meta pull — best-effort; falls back to the baked snapshot on any failure.
+    if (metaConfigured()) {
+      try {
+        await refreshMetaCache("last_30d");
+      } catch {}
+    }
     // Budget-pacing email alerts — evaluated after data is fresh (no-op unless configured).
     try {
       await runBudgetAlerts();
+    } catch {}
+    // Meta auto-pacing — applies budget changes only in "auto" mode (no-op otherwise).
+    try {
+      await runAutopace();
+    } catch {}
+    // AutoProtect — pauses/re-enables at the spend cap (no-op unless enabled).
+    try {
+      await runAutoProtect();
     } catch {}
     await writeSyncState({
       lastSyncedAt: now,

@@ -6,6 +6,8 @@ import { syncGoogleLive } from "@/lib/data/live-sync";
 import { refreshPlanCache } from "@/lib/plan/metrics";
 import { refreshTermsCache } from "@/lib/data/live-terms";
 import { refreshBudgetLost } from "@/lib/data/budget-lost";
+import { metaConfigured } from "@/lib/adapters/meta-rest";
+import { refreshMetaCache } from "@/lib/data/live-meta";
 
 /**
  * Refresh endpoint powering the top-bar "Refresh" button.
@@ -47,6 +49,14 @@ export async function POST() {
       await refreshPlanCache().catch(() => {});
       await refreshTermsCache().catch(() => {});
       await refreshBudgetLost().catch(() => {});
+    }
+    // Live Meta pull (independent of Windsor) — best-effort; the Social tab falls back
+    // to the baked snapshot if the token is missing or the pull fails.
+    if (metaConfigured()) {
+      try {
+        const m = await refreshMetaCache("last_30d");
+        note += ` Meta: ${m.campaigns} campaigns across ${m.accounts} accounts.`;
+      } catch { /* keep snapshot */ }
     }
   } catch (err) {
     note = `Live refresh unavailable — serving the latest snapshot.${err instanceof Error ? ` (${err.message})` : ""}`;

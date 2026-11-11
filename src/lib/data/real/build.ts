@@ -23,10 +23,10 @@ import { dateRangeList } from "../mock";
  */
 
 export const MARKET: Record<AcctCode, "AU" | "NZ" | "UK"> = {
-  "au-google": "AU", "nz-google": "NZ", "uk-google": "UK", "au-meta": "AU", "uk-meta": "UK",
+  "au-google": "AU", "nz-google": "NZ", "uk-google": "UK", "au-meta": "AU", "uk-meta": "UK", "nz-meta": "NZ",
 };
 export const CURRENCY: Record<AcctCode, "AUD" | "NZD" | "GBP"> = {
-  "au-google": "AUD", "nz-google": "NZD", "uk-google": "GBP", "au-meta": "AUD", "uk-meta": "GBP",
+  "au-google": "AUD", "nz-google": "NZD", "uk-google": "GBP", "au-meta": "AUD", "uk-meta": "GBP", "nz-meta": "NZD",
 };
 
 /** Windsor returns account_name; map it to our internal account id. */

@@ -86,9 +86,9 @@ export const AD_ACCOUNTS: AdAccount[] = [
     name: "LegalVision NZ",
     currency: "NZD",
     reportingTimezone: "Pacific/Auckland",
-    status: "pending_access",
+    status: "active",
     connectedSource: "mock",
-    notes: "Access blocked pending Business-Manager system-user token (A11).",
+    notes: "Live via Business-Manager system-user token (ads_read/ads_management).",
   },
 ];
 
