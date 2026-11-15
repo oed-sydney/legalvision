@@ -16,6 +16,7 @@ export type PacingStatus =
   | "on_track"
   | "watch"
   | "at_risk"
+  | "under_budget"
   | "over_budget"
   | "budget_not_set";
 
@@ -163,12 +164,7 @@ export function computePacing(input: PacingInput): PacingResult {
   const projectedVariance = projectedSpend - budget;
   const projectedVariancePct = projectedVariance / budget;
 
-  const status = resolveStatus({
-    spend,
-    budget,
-    projectedSpend,
-    pacingIndex,
-  });
+  const status = resolveStatus({ spend, budget, projectedSpend });
 
   return {
     status,
@@ -197,19 +193,22 @@ export function computePacing(input: PacingInput): PacingResult {
   };
 }
 
-function resolveStatus(a: {
-  spend: number;
-  budget: number;
-  projectedSpend: number;
-  pacingIndex: number | null;
-}): PacingStatus {
+/**
+ * Status is judged on the FORECAST (projected month-end spend) vs budget, within a ±10%
+ * band — so the pill always agrees with the "Forecast (mo-end)" figure the user reads:
+ *   • forecast > 110% of budget  → over budget
+ *   • forecast <  90% of budget  → under pace
+ *   • otherwise (within ±10%)    → on track
+ * Already past budget is always "over budget". (Earlier this keyed off spend-to-date pace,
+ * which could read "on track" while the forecast pointed under — confusing, now fixed.)
+ */
+function resolveStatus(a: { spend: number; budget: number; projectedSpend: number }): PacingStatus {
+  if (a.budget <= 0) return "budget_not_set";
   if (a.spend >= a.budget) return "over_budget";
-  if (a.projectedSpend > a.budget * 1.1) return "over_budget";
-  const idx = a.pacingIndex;
-  if (idx === null) return "not_started";
-  if (idx >= 0.95 && idx <= 1.05) return "on_track";
-  if ((idx >= 0.85 && idx < 0.95) || (idx > 1.05 && idx <= 1.15)) return "watch";
-  return "at_risk";
+  const r = a.projectedSpend / a.budget;
+  if (r > 1.1) return "over_budget";
+  if (r < 0.9) return "under_budget";
+  return "on_track";
 }
 
 function baseResult(p: {
@@ -254,6 +253,7 @@ export const PACING_STATUS_LABEL: Record<PacingStatus, string> = {
   on_track: "On track",
   watch: "Watch",
   at_risk: "At risk",
+  under_budget: "Under pace",
   over_budget: "Over budget",
   budget_not_set: "Budget not set",
 };

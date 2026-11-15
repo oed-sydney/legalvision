@@ -119,7 +119,7 @@ describe("Pacing engine — golden hand-computed scenarios (§8/§29.2)", () => 
     expect(r.dComplete).toBe(14);
   });
 
-  it("8. Mid-month budget change — uses latest budget for whole period (Watch)", () => {
+  it("8. Mid-month budget change — forecast 93% of budget is within the ±10% band (on track)", () => {
     const r = computePacing({
       ...JULY,
       budget: 40000, // raised mid-month
@@ -129,8 +129,8 @@ describe("Pacing engine — golden hand-computed scenarios (§8/§29.2)", () => 
     });
     expect(r.expectedSpend).toBeCloseTo(600000 / 31, 6); // ≈ 19354.84
     expect(r.pacingIndex).toBeCloseTo(0.93, 6);
-    expect(r.projectedSpend).toBeCloseTo(37200, 6);
-    expect(r.status).toBe("watch");
+    expect(r.projectedSpend).toBeCloseTo(37200, 6); // 93% of 40000 → within ±10%
+    expect(r.status).toBe("on_track");
   });
 
   it("9. Zero budget → Budget not set", () => {
@@ -161,7 +161,7 @@ describe("Pacing engine — golden hand-computed scenarios (§8/§29.2)", () => 
     expect(r.budgetExhausted).toBe(true);
   });
 
-  it("11. Catch-up required > 2× daily average (At risk)", () => {
+  it("11. Big shortfall — forecast far below budget flags Under pace", () => {
     const r = computePacing({
       ...JULY,
       budget: 31000,
@@ -172,7 +172,8 @@ describe("Pacing engine — golden hand-computed scenarios (§8/§29.2)", () => 
     expect(r.dailyAvgSpend).toBeCloseTo(5000 / 15, 6);
     expect(r.requiredDailySpend).toBeCloseTo(1625, 6); // (26000)/16
     expect(r.requiredDailySpend! > 2 * r.dailyAvgSpend).toBe(true);
-    expect(r.status).toBe("at_risk");
+    // projected ≈ 10333 → 33% of budget → well under the 90% floor
+    expect(r.status).toBe("under_budget");
   });
 
   it("12. Partial-day basis on — includes today's elapsed fraction", () => {
