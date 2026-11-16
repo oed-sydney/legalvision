@@ -31,8 +31,24 @@ export async function GET(request: Request) {
   }
 
   const now = new Date().toISOString();
+
+  // Live Meta pull FIRST — fast + independent, so it refreshes even if Windsor is missing or
+  // slow. Best-effort; the Social tab falls back to the baked snapshot on any failure.
+  if (metaConfigured()) {
+    try {
+      await refreshMetaCache("last_30d");
+    } catch {}
+  }
+
   if (!windsorConfigured()) {
-    return NextResponse.json({ ok: false, error: "WINDSOR_API_KEY not configured" }, { status: 200 });
+    // Meta still refreshed above; stamp so the freshness clock advances.
+    try {
+      await writeSyncState({ lastSyncedAt: now, mode: "live", rowsGoogle: 0, note: "Scheduled Meta refresh (Google not configured)." });
+    } catch {}
+    try {
+      ["/meta"].forEach((p) => revalidatePath(p));
+    } catch {}
+    return NextResponse.json({ ok: true, mode: "live", meta: true, google: false, syncedAt: now });
   }
 
   try {
@@ -47,12 +63,6 @@ export async function GET(request: Request) {
     try {
       await refreshPlanCache();
     } catch {}
-    // Live Meta pull — best-effort; falls back to the baked snapshot on any failure.
-    if (metaConfigured()) {
-      try {
-        await refreshMetaCache("last_30d");
-      } catch {}
-    }
     // Budget-pacing email alerts — evaluated after data is fresh (no-op unless configured).
     try {
       await runBudgetAlerts();

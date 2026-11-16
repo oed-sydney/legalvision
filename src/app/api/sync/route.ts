@@ -30,6 +30,11 @@ function stamp(res: NextResponse, at: string): NextResponse {
   return res;
 }
 
+/** Resolve to `null` if the promise hasn't settled within `ms` (the work is abandoned). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+}
+
 export async function POST() {
   const now = new Date().toISOString();
   let mode: "live" | "snapshot" = "snapshot";
@@ -37,29 +42,48 @@ export async function POST() {
   let days = 0;
   let note = "Snapshot re-validated. Add WINDSOR_API_KEY for a live Google pull.";
 
-  // Live Windsor pull when configured. Each step is best-effort so a failure in one (or no
-  // KV) never aborts the refresh — the cookie below always advances the freshness chip.
+  // Meta FIRST — it's fast and independent, so it must never be starved by the slow Google
+  // pull below (which can exceed the serverless limit). Best-effort; the Social tab falls
+  // back to the baked snapshot if the token is missing or the pull fails.
+  let metaNote = "";
+  if (metaConfigured()) {
+    try {
+      const m = await refreshMetaCache("last_30d");
+      metaNote = ` Meta: ${m.campaigns} campaigns across ${m.accounts} accounts.`;
+      mode = "live";
+    } catch {
+      metaNote = " Meta refresh skipped — serving the last Meta cache.";
+    }
+  }
+
+  // Live Windsor (Google) pull when configured — TIME-BOXED so the interactive Refresh never
+  // hits the serverless 60s ceiling and returns a 504. On timeout the Meta refresh above is
+  // already persisted, and the daily cron completes the full 90-day Google pull.
   try {
     if (windsorConfigured()) {
-      const r = await syncGoogleLive("last_90d"); // 90d → enables period comparisons
-      rowsGoogle = r.rows;
-      days = r.days;
-      mode = "live";
-      note = `Live Windsor pull: ${r.rows} rows across ${r.days} days.`;
-      await refreshPlanCache().catch(() => {});
-      await refreshTermsCache().catch(() => {});
-      await refreshBudgetLost().catch(() => {});
-    }
-    // Live Meta pull (independent of Windsor) — best-effort; the Social tab falls back
-    // to the baked snapshot if the token is missing or the pull fails.
-    if (metaConfigured()) {
-      try {
-        const m = await refreshMetaCache("last_30d");
-        note += ` Meta: ${m.campaigns} campaigns across ${m.accounts} accounts.`;
-      } catch { /* keep snapshot */ }
+      const r = await withTimeout(
+        (async () => {
+          const g = await syncGoogleLive("last_90d"); // 90d → enables period comparisons
+          await refreshPlanCache().catch(() => {});
+          await refreshTermsCache().catch(() => {});
+          await refreshBudgetLost().catch(() => {});
+          return g;
+        })(),
+        45_000
+      );
+      if (r) {
+        rowsGoogle = r.rows;
+        days = r.days;
+        mode = "live";
+        note = `Live Windsor pull: ${r.rows} rows across ${r.days} days.${metaNote}`;
+      } else {
+        note = `Google refresh is taking longer than usual — it'll finish on the next scheduled sync.${metaNote}`;
+      }
+    } else {
+      note = `Snapshot re-validated. Add WINDSOR_API_KEY for a live Google pull.${metaNote}`;
     }
   } catch (err) {
-    note = `Live refresh unavailable — serving the latest snapshot.${err instanceof Error ? ` (${err.message})` : ""}`;
+    note = `Live refresh unavailable — serving the latest snapshot.${err instanceof Error ? ` (${err.message})` : ""}${metaNote}`;
   }
 
   // Persist to KV (global source of truth) best-effort — ignore failures; the cookie carries
