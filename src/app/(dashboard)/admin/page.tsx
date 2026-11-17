@@ -11,6 +11,7 @@ import { BudgetEditor } from "@/components/admin/BudgetEditor";
 import { AlertsEditor } from "@/components/admin/AlertsEditor";
 import { AutopaceEditor } from "@/components/admin/AutopaceEditor";
 import { InviteUserForm } from "@/components/admin/InviteUserForm";
+import { UsersRolesTable } from "@/components/admin/UsersRolesTable";
 import { getAlertConfig } from "@/lib/alerts/config";
 import { getAutopaceConfig, getAutopaceLog } from "@/lib/pacing/autopace-config";
 import { computeAutopace } from "@/lib/pacing/autopace";
@@ -18,8 +19,6 @@ import { emailConfigured } from "@/lib/alerts/email";
 import { getSessionProfile } from "@/lib/auth/session";
 import { listAppUsers } from "@/lib/auth/users";
 import { currentPeriod } from "@/lib/data/period";
-
-const ROLE_TONE = { admin: "info", internal: "success", client: "purple", viewer: "grey" } as const;
 
 export default async function AdminPage() {
   const me = await getSessionProfile();
@@ -51,18 +50,7 @@ export default async function AdminPage() {
                 <div className="mb-4">
                   <InviteUserForm />
                 </div>
-                <Table
-                  head={["Name", "Email", "Role", "Scope", "Lead records", "Status", "Last login"]}
-                  rows={userRows.map((u) => [
-                    u.name ?? "—",
-                    u.email,
-                    <StatusPill key={u.id} tone={ROLE_TONE[u.role]} dot={false}>{u.role}</StatusPill>,
-                    u.markets.length ? u.markets.join(", ") : "All",
-                    u.leadRecordAccess ? "Yes" : "No",
-                    <StatusPill key={u.id + "s"} tone={u.status === "active" ? "success" : u.status === "invited" ? "warning" : "grey"} dot={false}>{u.status}</StatusPill>,
-                    u.lastLoginAt ? new Date(u.lastLoginAt).toISOString().slice(0, 10) : "—",
-                  ])}
-                />
+                <UsersRolesTable users={userRows} currentUserId={me.id} />
               </Card>
             ),
           },

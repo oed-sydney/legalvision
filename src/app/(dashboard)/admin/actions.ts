@@ -111,6 +111,63 @@ export async function applyAutopaceNow() {
   }
 }
 
+const roleUpdateSchema = z.object({
+  userId: z.string().min(1),
+  role: z.enum(["admin", "internal", "client", "viewer"]),
+});
+
+/**
+ * Change an existing user's role (Admin → Users & roles). Admin only.
+ * - Keeps `leadRecordAccess` consistent with the role (admin/internal = yes, client/viewer = no).
+ * - admin/internal mean "all markets", so any leftover market-scope rows are cleared — otherwise
+ *   session.ts would wrongly restrict a promoted admin to those markets.
+ * - Refuses to demote the last remaining active admin (prevents locking everyone out).
+ */
+export async function updateUserRole(input: { userId: string; role: string }) {
+  const me = await getSessionProfile();
+  if (!me || me.role !== "admin") return { ok: false as const, error: "Admins only." };
+
+  const parsed = roleUpdateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: "Invalid role." };
+  const { userId, role } = parsed.data;
+
+  const admin = createSupabaseAdmin();
+  const { data: target, error: tErr } = await admin
+    .from("UserProfile")
+    .select("id,role")
+    .eq("id", userId)
+    .single();
+  if (tErr || !target) return { ok: false as const, error: "User not found." };
+  if (target.role === role) return { ok: true as const }; // no-op
+
+  // Never strip the last admin — promote a replacement first.
+  if (target.role === "admin" && role !== "admin") {
+    const { count } = await admin
+      .from("UserProfile")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("status", "active");
+    if ((count ?? 0) <= 1) {
+      return { ok: false as const, error: "Can't change the last admin's role — promote another admin first." };
+    }
+  }
+
+  const allMarkets = role === "admin" || role === "internal";
+  const { error: uErr } = await admin
+    .from("UserProfile")
+    .update({ role, leadRecordAccess: allMarkets, updatedAt: new Date().toISOString() })
+    .eq("id", userId);
+  if (uErr) return { ok: false as const, error: uErr.message };
+
+  // admin/internal = all markets → drop any scope rows that would otherwise restrict them.
+  if (allMarkets) {
+    await admin.from("UserScope").delete().eq("userId", userId).eq("scopeType", "market");
+  }
+
+  revalidatePath("/admin");
+  return { ok: true as const };
+}
+
 const inviteSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
