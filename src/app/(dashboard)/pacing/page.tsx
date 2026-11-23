@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { ArrowUp, ArrowDown, Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { PacingStatusPill } from "@/components/ui/StatusPill";
@@ -20,7 +21,7 @@ import { currentPeriod } from "@/lib/data/period";
 import { hydrateLiveData } from "@/lib/data/source";
 import { marketName } from "@/lib/domain/accounts";
 import { CURRENCY_SYMBOL, formatMoney, formatPercent } from "@/lib/metrics/format";
-import { PACING_STATUS_LABEL } from "@/lib/pacing/engine";
+import { PACING_STATUS_LABEL, type PacingResult } from "@/lib/pacing/engine";
 
 export default async function PacingPage({
   searchParams,
@@ -172,7 +173,7 @@ function SummaryPanel({
                 <PacingStatusPill status={m.pacing.status} />
               </div>
               <div className="mb-2.5">
-                <PaceIndicator pct={m.pacing.pacingVariancePct} />
+                <ForecastPaceLine pacing={m.pacing} />
               </div>
               <div className="relative mb-2 h-2.5 w-full overflow-hidden rounded-full bg-canvas">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(util * 100, 100)}%` }} />
@@ -371,6 +372,36 @@ function LastMonthPanel({ data }: { data: LastMonthPerformance }) {
     </Card>
   );
 }
+/**
+ * Market-card sub-line, derived from the SAME forecast-vs-budget status as the pill above it
+ * (so they can never disagree — e.g. no green "On pace" under a red "Over budget"). The
+ * spend-to-date pace still shows via the progress-bar marker and the "Expected" row.
+ */
+function ForecastPaceLine({ pacing }: { pacing: PacingResult }) {
+  const { status, projectedVariancePct: pct } = pacing;
+  if (pct == null || status === "not_started" || status === "budget_not_set") {
+    return <span className="text-[13px] text-muted">Forecast —</span>;
+  }
+  const over = pct > 0;
+  const color =
+    status === "over_budget"
+      ? "var(--lv-danger)"
+      : status === "under_budget"
+        ? "var(--lv-purple)"
+        : "var(--lv-success)";
+  const Icon = status === "on_track" ? Check : over ? ArrowUp : ArrowDown;
+  const label =
+    status === "on_track"
+      ? "Forecast on budget"
+      : `Forecast ${(Math.abs(pct) * 100).toFixed(1)}% ${over ? "over" : "under"} budget`;
+  return (
+    <span className="inline-flex items-center gap-1 text-[14px] font-semibold tnum" style={{ color }}>
+      <Icon className="h-3.5 w-3.5" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
 function Row({ k, v, tone }: { k: string; v: string; tone?: string }) {
   return (
     <>
