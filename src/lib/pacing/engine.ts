@@ -194,20 +194,24 @@ export function computePacing(input: PacingInput): PacingResult {
 }
 
 /**
- * Status is judged on the FORECAST (projected month-end spend) vs budget, within a ±10%
- * band — so the pill always agrees with the "Forecast (mo-end)" figure the user reads:
- *   • forecast > 110% of budget  → over budget
+ * Status is judged on the FORECAST (projected month-end spend) vs budget, so the pill always
+ * agrees with the "Forecast (mo-end)" figure the user reads. The band is ASYMMETRIC: overspend
+ * is the costly direction so it's flagged tightly (+3%), while a modest underspend is tolerated:
+ *   • forecast > 103% of budget  → over budget   (e.g. AU 203k vs 190k budget = +7% → flagged)
  *   • forecast <  90% of budget  → under pace
- *   • otherwise (within ±10%)    → on track
+ *   • otherwise                  → on track
  * Already past budget is always "over budget". (Earlier this keyed off spend-to-date pace,
- * which could read "on track" while the forecast pointed under — confusing, now fixed.)
+ * which could read "on track" while the forecast pointed over — confusing, now fixed.)
  */
+const FORECAST_OVER_PCT = 0.03; // forecast more than +3% over budget → over budget
+const FORECAST_UNDER_PCT = 0.1; // forecast more than −10% under budget → under pace
+
 function resolveStatus(a: { spend: number; budget: number; projectedSpend: number }): PacingStatus {
   if (a.budget <= 0) return "budget_not_set";
   if (a.spend >= a.budget) return "over_budget";
   const r = a.projectedSpend / a.budget;
-  if (r > 1.1) return "over_budget";
-  if (r < 0.9) return "under_budget";
+  if (r > 1 + FORECAST_OVER_PCT) return "over_budget";
+  if (r < 1 - FORECAST_UNDER_PCT) return "under_budget";
   return "on_track";
 }
 

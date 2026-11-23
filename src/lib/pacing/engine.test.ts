@@ -192,4 +192,32 @@ describe("Pacing engine — golden hand-computed scenarios (§8/§29.2)", () => 
     expect(r.projectedSpend).toBeCloseTo(31000, 6);
     expect(r.status).toBe("on_track");
   });
+
+  it("13. Forecast +7% over budget flags Over budget (tight +3% over band)", () => {
+    // Mirrors AU: on pace to date, but the trailing run-rate projects past budget.
+    const r = computePacing({
+      ...JULY,
+      budget: 100_000,
+      spend: 50_000,
+      now: new Date("2026-07-16T02:00:00Z"), // D_complete 15, 16 days remaining
+      timezone: AU,
+      trailingAvg7: 3562.5, // projected 50000 + 3562.5×16 = 107000
+    });
+    expect(r.daysRemaining).toBe(16);
+    expect(r.projectedSpend).toBeCloseTo(107_000, 6); // 107% of budget
+    expect(r.status).toBe("over_budget"); // was "on_track" under the old ±10% band
+  });
+
+  it("14. Forecast +2% over budget still reads On track (within the +3% band)", () => {
+    const r = computePacing({
+      ...JULY,
+      budget: 100_000,
+      spend: 50_000,
+      now: new Date("2026-07-16T02:00:00Z"),
+      timezone: AU,
+      trailingAvg7: 3250, // projected 50000 + 3250×16 = 102000 = 102%
+    });
+    expect(r.projectedSpend).toBeCloseTo(102_000, 6);
+    expect(r.status).toBe("on_track");
+  });
 });
